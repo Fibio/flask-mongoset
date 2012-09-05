@@ -193,11 +193,6 @@ class Model(AttrDict):
         return cls.query_class(database=cls.db, name=cls.__collection__,
                                document_class=cls)
 
-    # @property
-    # def id(self):
-    #     if not getattr(self, "id", None):
-    #         return str(self._id)
-
     def __init__(self, *args, **kwargs):
         assert 'query_class' not in kwargs
         assert 'query' not in kwargs

@@ -2,16 +2,16 @@ from flaskext.mongoobject import Model, autoincrement
 from conftest import BaseModelTest, SomeModel, SomedbModel
 
 
-# class TestdbModel(BaseModelTest):
-#     model = SomedbModel
+class TestdbModel(BaseModelTest):
+    model = SomedbModel
 
 
-# class TestModelRegistration(BaseModelTest):
-#     model = SomeModel
+class TestModelRegistration(BaseModelTest):
+    model = SomeModel
 
-#     def setUp(self):
-#         super(TestModelRegistration, self).setUp()
-#         self.db.register(self.model)
+    def setUp(self):
+        super(TestModelRegistration, self).setUp()
+        self.db.register(self.model)
 
 
 class TestModelDecorator(BaseModelTest):
