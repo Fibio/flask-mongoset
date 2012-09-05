@@ -1,6 +1,8 @@
 from operator import methodcaller, attrgetter
 import flask
+from werkzeug.exceptions import NotFound
 from flaskext.mongoobject import MongoObject, Model
+
 
 db = MongoObject()
 app = flask.Flask(__name__)
@@ -11,15 +13,12 @@ class SomeModel(Model):
     __collection__ = "tests"
 
 db.set_mapper(SomeModel)
-db.autoincrement(SomeModel)
 
 
 class SomedbModel(db.Model):
     __collection__ = "dbtests"
 
-
 db.set_mapper(SomedbModel)
-db.autoincrement(SomedbModel)
 
 
 class BaseTest(object):
@@ -51,20 +50,36 @@ class BaseModelTest(BaseTest):
         result = self.model.query.find_one({"test": "hello world"})
         assert result._id == id
         assert result.test == "hello world"
+        assert isinstance(result, self.model)
 
     def test_find(self):
         self.insert({"test": "hello world"})
         self.insert({"test": "testing"})
         self.insert({"test": "testing", "hello": "world"})
         result = self.model.query.find({"test": "testing"})
-        result[0].test = "testing"
         assert result.count() == 2
+        result = result[0]
+        result.test = "testing"
+        assert isinstance(result, self.model)
 
     def test_save_return_a_class(self):
         test = self.model({"test": "hello"})
         test.save()
         assert test.test == "hello"
         assert isinstance(test, self.model)
+
+    def test_create(self):
+        result = self.model.create(name='Hello')
+        assert result == self.model.query.find_one(name='Hello')
+        assert self.model.query.find({"name": "Hello"}).count() == 1
+
+        result = self.model.get_or_create(name='Hello')
+        assert result == self.model.query.find_one(name='Hello')
+        assert self.model.query.find({"name": "Hello"}).count() == 1
+        assert isinstance(result, self.model)
+
+        result = self.model.get_or_create(test='test')
+        assert result == self.model.query.find_one(test='test')
 
     def test_not_override_default_variables(self):
         try:
@@ -94,6 +109,7 @@ class BaseModelTest(BaseTest):
         child = self.model.query.find_one({"test": "test"})
         assert child.parent.test == "hello"
         assert child.parent.__class__.__name__ == self.model.__name__
+        assert isinstance(child, self.model)
         assert isinstance(child.parent, self.model)
 
     def test_handle_auto_dbref_inside_a_list(self):
@@ -105,6 +121,7 @@ class BaseModelTest(BaseTest):
         child = self.model.query.find_one({"test": "testing"})
         assert child.parents[0].test == "hellotest"
         assert child.parents[0].__class__.__name__ == self.model.__name__
+        assert isinstance(child, self.model)
         assert isinstance(child.parents[0], self.model)
 
     def test_update(self):
@@ -119,3 +136,24 @@ class BaseModelTest(BaseTest):
         parent = self.model.query.find()[0]
         assert parent.hello == "test"
         assert parent.test == "Hello"
+        assert isinstance(parent, self.model)
+
+
+    def test_404(self):
+        try:
+            self.model.query.get_or_404('4879453489')
+            assert False
+        except NotFound:
+            assert True
+
+        try:
+            self.model.query.find_one_or_404(name='wrong_name')
+            assert False
+        except NotFound:
+            assert True
+
+        try:
+            self.model.query.find_or_404(name='wrong_name')
+            assert False
+        except NotFound:
+            assert True

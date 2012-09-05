@@ -8,6 +8,7 @@ Add basic MongoDB support to your Flask application.
 Inspiration:
 https://github.com/slacy/minimongo/
 https://github.com/mitsuhiko/flask-sqlalchemy
+https://github.com/namlook/mongokit
 
 :copyright: (c) 2011 by Daniel, Dao Quang Minh (dqminh).
 :license: MIT, see LICENSE for more details.
@@ -15,16 +16,15 @@ https://github.com/mitsuhiko/flask-sqlalchemy
 from __future__ import absolute_import
 import operator
 from bson.dbref import DBRef
-from bson.son import SON
 from pymongo import Connection
+from pymongo.database import Database
 from pymongo.collection import Collection
-from pymongo.cursor import Cursor
 from pymongo.son_manipulator import SONManipulator, AutoReference, NamespaceInjector
 
 from flask import abort
 
 
-autoincrement_models = []
+inc_collections = set([])
 
 
 class AuthenticationIncorrect(Exception):
@@ -41,6 +41,11 @@ class ClassProperty(property):
 
 
 classproperty = ClassProperty
+
+
+def autoincrement(cls):
+    inc_collections.add(cls.__collection__)
+    return cls
 
 
 class AttrDict(dict):
@@ -82,33 +87,14 @@ class AttrDict(dict):
             setattr(self, key, value)
 
 
-class MongoCursor(Cursor):
-    """
-    A cursor that will return an instance of :attr:`as_class` instead of
-    `dict`
-    """
-    def __init__(self, *args, **kwargs):
-        self.as_class = kwargs.pop('as_class')
-        super(MongoCursor, self).__init__(*args, **kwargs)
-
-    def next(self):
-        data = super(MongoCursor, self).next()
-        return self.as_class(data)
-
-    def __getitem__(self, index):
-        item = super(MongoCursor, self).__getitem__(index)
-        if isinstance(index, slice):
-            return item
-        else:
-            return self.as_class(item)
-
-
 class AutoincrementId(SONManipulator):
     """ Creates objects id as integer and autoincrement it,
-        if "id" not in son object, but not usefull with DBRefs
+        if "id" not in son object.
+        But not usefull with DBRefs if DBRefs are based on "id" not "id_"
     """
     def transform_incoming(self, son, collection):
-        son["id"] = son.get('id', self._get_next_id(collection))
+        if collection.name in inc_collections:
+            son["id"] = son.get('id', self._get_next_id(collection))
         return son
 
     def _get_next_id(self, collection):
@@ -117,7 +103,7 @@ class AutoincrementId(SONManipulator):
             query={"id": collection.name,},
             update={"$inc": {"next": 1},},
             upsert=True,
-            new=True,)
+            new=True)
         return result["next"]
 
 
@@ -141,21 +127,21 @@ class AutoReferenceObject(AutoReference):
 
     def __init__(self, mongo):
         self.mongo = mongo
-        self.db = mongo.session
+        self.__database = mongo.session
 
     def transform_outgoing(self, son, collection):
         def transform_value(value):
             if isinstance(value, DBRef):
                 return transform_value(self.__database.dereference(value))
             elif isinstance(value, list):
-                return [transform_value(v) for v in value]
+                return map(transform_value, value)
             elif isinstance(value, dict):
                 if value.get('_ns', None):
                     # if the collection has a :class:`Model` mapper
                     cls = self.mongo.mapper.get(value['_ns'], None)
                     if cls:
-                        return cls(transform_dict(SON(value)))
-                return transform_dict(SON(value))
+                        return cls(transform_dict(value))
+                return transform_dict(value)
             return value
 
         def transform_dict(object):
@@ -163,7 +149,7 @@ class AutoReferenceObject(AutoReference):
                 object[key] = transform_value(value)
             return object
 
-        value = transform_dict(SON(son))
+        value = transform_dict(son)
         return value
 
 
@@ -177,38 +163,19 @@ class BaseQuery(Collection):
         self.document_class = kwargs.pop('document_class')
         super(BaseQuery, self).__init__(*args, **kwargs)
 
-    def find_one(self, *args, **kwargs):
-        kwargs['as_class'] = self.document_class
-        return super(BaseQuery, self).find_one(*args, **kwargs)
-
     def find(self, *args, **kwargs):
         kwargs['as_class'] = self.document_class
-        return MongoCursor(self, *args, **kwargs)
-
-    def find_and_modify(self, *args, **kwargs):
-        kwargs['as_class'] = self.document_class
-        return super(BaseQuery, self).find_and_modify(*args, **kwargs)
+        return super(BaseQuery, self).find(*args, **kwargs)
 
     def get_or_404(self, id):
-        item = self.find_one(id, as_class=self.document_class)
-        if not item:
-            abort(404)
-        return item
+        return self.find_one(id) or abort(404)
 
+    def find_one_or_404(self, *args, **kwargs):
+        return self.find_one(*args, **kwargs) or abort(404)
 
-class _QueryProperty(object):
-    """
-    Represent :attr:`Model.query` that dynamically instantiate
-    :attr:`Model.query_class` so that we can do things like
-    `Model.query.find_one`
-    """
-    def __init__(self, mongo):
-        self.mongo = mongo
-
-    def __get__(self, instance, owner):
-        return owner.query_class(database=self.mongo.session,
-                                 name=owner.__collection__,
-                                 document_class=owner)
+    def find_or_404(self, *args, **kwargs):
+        cursor = self.find(*args, **kwargs)
+        return not cursor.count() == 0 and cursor or abort(404)
 
 
 class Model(AttrDict):
@@ -216,17 +183,20 @@ class Model(AttrDict):
     Base class for custom user models. Provide convenience ActiveRecord
     methods such as :attr:`save`, :attr:`remove`
     """
-    #: Query class
+
     query_class = BaseQuery
-    #: instance of :attr:`query_class`
-    query = None
-    #: name of this model collection
+
     __collection__ = None
 
-    @property
-    def id(self):
-        if getattr(self, "id", None):
-            return str(self._id)
+    @classproperty
+    def query(cls):
+        return cls.query_class(database=cls.db, name=cls.__collection__,
+                               document_class=cls)
+
+    # @property
+    # def id(self):
+    #     if not getattr(self, "id", None):
+    #         return str(self._id)
 
     def __init__(self, *args, **kwargs):
         assert 'query_class' not in kwargs
@@ -245,19 +215,31 @@ class Model(AttrDict):
     def remove(self):
         return self.query.remove(self._id)
 
-    def __str__(self):
-        return '%s(%s)' % (self.__class__.__name__,
-                           super(Model, self).__str__())
+    @classmethod
+    def create(cls, *args, **kwargs):
+        instance = cls(*args, **kwargs)
+        return instance.save()
+
+    @classmethod
+    def get_or_create(cls, *args, **kwargs):
+        instance = cls.query.find_one(*args, **kwargs)
+        return instance or instance.create(*args, **kwargs)
+
+
+    def __repr__(self):
+        return "<%s:%s>" % (self.__class__.__name__,
+                            getattr(self, 'id', self._id))
 
     def __unicode__(self):
         return str(self).decode('utf-8')
 
 
 class MongoObject(object):
+
     def __init__(self, app=None):
         if app is not None:
             self.init_app(app)
-        self.Model = self.make_model()
+        self.Model = Model
         self.mapper = {}
 
     def init_app(self, app):
@@ -270,6 +252,7 @@ class MongoObject(object):
         self.app = app
         self.connect()
         self.app.after_request(self.close_connection)
+        self.Model.db = self.session
 
     def connect(self):
         """Connect to the MongoDB server and register the documents from
@@ -286,8 +269,6 @@ class MongoObject(object):
                 host=self.app.config.get('MONGODB_HOST'),
                 port=self.app.config.get('MONGODB_PORT'),
                 slave_okay=self.app.config.get('MONGODB_SLAVE_OKAY', False))
-
-            # ctx.mongokit_connection.register(self.registered_documents)
 
         if self.app.config.get('MONGODB_USERNAME') is not None:
             auth_success = self.session.authenticate(
@@ -316,14 +297,9 @@ class MongoObject(object):
 
         :param documents: A :class:`list` of :class:`mongoobject.Model`.
         """
-        [setattr(model, 'query', _QueryProperty(self)) for model in models \
-        if not getattr(model, 'query', None) or not isinstance(model.query, _QueryProperty)]
+        [setattr(model, 'db', self.session) for model in models \
+        if not getattr(model, 'db', None) or not isinstance(model.db, Database)]
         return len(models) == 1 and models[0] or models
-
-    def make_model(self):
-        model = Model
-        model.query = _QueryProperty(self)
-        return model
 
     @property
     def session(self):
@@ -340,9 +316,6 @@ class MongoObject(object):
         # Set up mapper for model, so when ew retrieve documents from database,
         # we will know how to map them to model object based on `_ns` fields
         self.mapper[model.__collection__] = model
-
-    def autoincrement(self, cls):
-        autoincrement_models.append(cls.__collection__)
 
     def close_connection(self, response):
         self.connection.end_request()

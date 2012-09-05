@@ -10,14 +10,13 @@ TESTING = True
 class SomeModel(db.Model):
     __collection__ = "tests"
 
-
 db.set_mapper(SomeModel)
-db.autoincrement(SomeModel)
+
 
 app.config['MONGODB_HOST'] = "mongodb://localhost:27017"
 app.config['MONGODB_DATABASE'] = "testdb"
 app.config['MONGODB_AUTOREF'] = False
-app.config['AUTOINCREMENT'] = True
+app.config['AUTOINCREMENT'] = False
 app.config['TESTING'] = True
 db.init_app(app)
 
