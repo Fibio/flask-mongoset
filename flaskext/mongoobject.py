@@ -13,14 +13,35 @@ https://github.com/mitsuhiko/flask-sqlalchemy
 :license: MIT, see LICENSE for more details.
 """
 from __future__ import absolute_import
+import operator
 from bson.dbref import DBRef
 from bson.son import SON
 from pymongo import Connection
 from pymongo.collection import Collection
 from pymongo.cursor import Cursor
-from pymongo.son_manipulator import AutoReference, NamespaceInjector
+from pymongo.son_manipulator import SONManipulator, AutoReference, NamespaceInjector
 
 from flask import abort
+
+
+autoincrement_models = []
+
+
+class AuthenticationIncorrect(Exception):
+    pass
+
+
+class ClassProperty(property):
+    def __init__(self, method, *args, **kwargs):
+        method = classmethod(method)
+        return super(ClassProperty, self).__init__(method, *args, **kwargs)
+
+    def __get__(self, cls, owner):
+        return self.fget.__get__(None, owner)()
+
+
+classproperty = ClassProperty
+
 
 class AttrDict(dict):
     """
@@ -28,57 +49,37 @@ class AttrDict(dict):
     like a dict `x['y']` and like an object `x.y`
     """
     def __init__(self, initial=None, **kwargs):
-        # Make sure that during initialization, that we recursively apply
-        # AttrDict.  Maybe this could be better done with the builtin
-        # defaultdict?
-        if initial:
-            for key, value in initial.iteritems():
-                # Can't just say self[k] = v here b/c of recursion.
-                self.__setitem__(key, value)
-        # Process the other arguments (assume they are also default values).
-        # This is the same behavior as the regular dict constructor.
-        for key, value in kwargs.iteritems():
-            self.__setitem__(key, value)
+        initial and self._setattrs(**initial)
+        self._setattrs(**kwargs)
 
-        super(AttrDict, self).__init__()
-
-    # These lines make this object behave both like a dict (x['y']) and like
-    # an object (x.y).  We have to translate from KeyError to AttributeError
-    # since model.undefined raises a KeyError and model['undefined'] raises
-    # a KeyError.  we don't ever want __getattr__ to raise a KeyError, so we
-    # 'translate' them below:
     def __getattr__(self, attr):
-        try:
-            return super(AttrDict, self).__getitem__(attr)
-        except KeyError as excn:
-            raise AttributeError(excn)
+        return self._change_method('__getitem__', attr)
 
     def __setattr__(self, attr, value):
+        value = self._make_attr_dict(value)
+        return self.__setitem__(attr, value)
+
+    def __delattr__(self, attr):
+        return self._change_method('__delitem__', attr)
+
+    def _make_attr_dict(self, value):
+        # Supporting method for self.__setitem__
+        if isinstance(value, list):
+            value = map(self._make_attr_dict, value)
+        elif isinstance(value, dict) and not isinstance(value, AttrDict):
+            value = AttrDict(value)
+        return value
+
+    def _change_method(self, method, *args, **kwargs):
         try:
-            # Okay to set directly here, because we're not recursing.
-            self[attr] = value
+            callmethod = operator.methodcaller(method, *args, **kwargs)
+            return callmethod(super(AttrDict, self))
         except KeyError as excn:
             raise AttributeError(excn)
 
-    def __delattr__(self, key):
-        try:
-            return super(AttrDict, self).__delitem__(key)
-        except KeyError as excn:
-            raise AttributeError(excn)
-
-    def __setitem__(self, key, value):
-        new_value = value
-        # if the nested attribute is not an :class: `AttrDict` already,
-        # convert it to one
-        if isinstance(value, dict) and not isinstance(value, AttrDict):
-            new_value = AttrDict(value)
-        elif isinstance(value, list):
-            for i, item in enumerate(value):
-                if isinstance(item, dict) and not isinstance(item, AttrDict):
-                    value[i] = AttrDict(item)
-                else:
-                    value[i] = item
-        return super(AttrDict, self).__setitem__(key, new_value)
+    def _setattrs(self, **kwargs):
+        for key, value in kwargs.iteritems():
+            setattr(self, key, value)
 
 
 class MongoCursor(Cursor):
@@ -100,6 +101,24 @@ class MongoCursor(Cursor):
             return item
         else:
             return self.as_class(item)
+
+
+class AutoincrementId(SONManipulator):
+    """ Creates objects id as integer and autoincrement it,
+        if "id" not in son object, but not usefull with DBRefs
+    """
+    def transform_incoming(self, son, collection):
+        son["id"] = son.get('id', self._get_next_id(collection))
+        return son
+
+    def _get_next_id(self, collection):
+        database = collection.database
+        result = database._autoincrement_ids.find_and_modify(
+            query={"id": collection.name,},
+            update={"$inc": {"next": 1},},
+            upsert=True,
+            new=True,)
+        return result["next"]
 
 
 class AutoReferenceObject(AutoReference):
@@ -206,7 +225,7 @@ class Model(AttrDict):
 
     @property
     def id(self):
-        if getattr(self, "_id", None):
+        if getattr(self, "id", None):
             return str(self._id)
 
     def __init__(self, *args, **kwargs):
@@ -237,25 +256,69 @@ class Model(AttrDict):
 class MongoObject(object):
     def __init__(self, app=None):
         if app is not None:
-            self.app = app
             self.init_app(app)
         self.Model = self.make_model()
         self.mapper = {}
 
     def init_app(self, app):
-        app.config.setdefault('MONGODB_HOST', "mongodb://localhost:27017")
+        app.config.setdefault('MONGODB_HOST', "localhost")
+        app.config.setdefault('MONGODB_PORT', 27017)
         app.config.setdefault('MONGODB_DATABASE', "")
         app.config.setdefault('MONGODB_AUTOREF', True)
+        app.config.setdefault('AUTOINCREMENT', True)
         # initialize connection and Model properties
         self.app = app
         self.connect()
         self.app.after_request(self.close_connection)
 
     def connect(self):
-        self.connection = Connection(self.app.config['MONGODB_HOST'])
+        """Connect to the MongoDB server and register the documents from
+        :attr:`registered_documents`. If you set ``MONGODB_USERNAME`` and
+        ``MONGODB_PASSWORD`` then you will be authenticated at the
+        ``MONGODB_DATABASE``.
+        """
+        if not getattr(self, 'app', None):
+            raise RuntimeError('The mongoobject extension was not init to '
+                               'the current application.  Please make sure '
+                               'to call init_app() first.')
+        if not getattr(self, 'connection', None):
+            self.connection = Connection(
+                host=self.app.config.get('MONGODB_HOST'),
+                port=self.app.config.get('MONGODB_PORT'),
+                slave_okay=self.app.config.get('MONGODB_SLAVE_OKAY', False))
 
-    def init_connection(self):
-        self.connection = Connection(self.app.config['MONGODB_HOST'])
+            # ctx.mongokit_connection.register(self.registered_documents)
+
+        if self.app.config.get('MONGODB_USERNAME') is not None:
+            auth_success = self.session.authenticate(
+                self.app.config.get('MONGODB_USERNAME'),
+                self.app.config.get('MONGODB_PASSWORD'))
+            if not auth_success:
+                raise AuthenticationIncorrect
+
+    def register(self, *models):
+        """Register one or more :class:`mongoobject.Model` instances to the
+        connection.
+
+        Can be also used as a decorator on Model:
+
+        .. code-block:: python
+
+            db = MongoObject(app)
+
+            @db.register
+            class Task(Model):
+                structure = {
+                   'title': unicode,
+                   'text': unicode,
+                   'creation': datetime,
+                }
+
+        :param documents: A :class:`list` of :class:`mongoobject.Model`.
+        """
+        [setattr(model, 'query', _QueryProperty(self)) for model in models \
+        if not getattr(model, 'query', None) or not isinstance(model.query, _QueryProperty)]
+        return len(models) == 1 and models[0] or models
 
     def make_model(self):
         model = Model
@@ -269,12 +332,17 @@ class MongoObject(object):
             if self.app.config['MONGODB_AUTOREF']:
                 self.db.add_son_manipulator(NamespaceInjector())
                 self.db.add_son_manipulator(AutoReferenceObject(self))
+            if self.app.config['AUTOINCREMENT']:
+                self.db.add_son_manipulator(AutoincrementId())
         return self.db
 
     def set_mapper(self, model):
         # Set up mapper for model, so when ew retrieve documents from database,
         # we will know how to map them to model object based on `_ns` fields
         self.mapper[model.__collection__] = model
+
+    def autoincrement(self, cls):
+        autoincrement_models.append(cls.__collection__)
 
     def close_connection(self, response):
         self.connection.end_request()
