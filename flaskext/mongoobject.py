@@ -15,6 +15,7 @@ https://github.com/namlook/mongokit
 """
 from __future__ import absolute_import
 import operator
+import trafaret as t
 from bson.dbref import DBRef
 from pymongo import Connection
 from pymongo.database import Database
@@ -44,6 +45,9 @@ classproperty = ClassProperty
 
 
 def autoincrement(cls):
+    """ Adds collection name in inc_collections register to
+    AutoincrementId works
+    """
     inc_collections.add(cls.__collection__)
     return cls
 
@@ -155,15 +159,22 @@ class AutoReferenceObject(AutoReference):
 
 class BaseQuery(Collection):
     """
-    `BaseQuery` extends :class:`pymongo.Collection` that replaces all results
-    coming from database with instance of :class:`Model`
+    `BaseQuery` extends :class:`pymongo.Collection` that adds :as_class: parameter
+    into parameters of pymongo find method
     """
 
     def __init__(self, *args, **kwargs):
         self.document_class = kwargs.pop('document_class')
+        self.i18n = getattr(self.document_class, 'i18n', None)
         super(BaseQuery, self).__init__(*args, **kwargs)
 
     def find(self, *args, **kwargs):
+        if self.i18n:
+            lang = kwargs.pop('_lang', self.document_class.fallback_lang)
+            for attr in self.i18n:
+                value = kwargs.pop(attr, None)
+                if value:
+                    kwargs['{}.{}'.format(lang, attr)] = value
         kwargs['as_class'] = self.document_class
         return super(BaseQuery, self).find(*args, **kwargs)
 
@@ -178,20 +189,39 @@ class BaseQuery(Collection):
         return not cursor.count() == 0 and cursor or abort(404)
 
 
+class ModelType(type):
+    """ Ghanges validation rules for transleted attrs
+    """
+    def __init__(cls, name, bases, dct):
+        if cls.structure:
+            for key in cls.structure.keys[:]:
+                if key.name in cls.i18n:
+                    cls.structure.keys.remove(key)
+                    cls.structure.keys.append(t.Key(key.name,
+                                              trafaret=t.Mapping(t.String, key.trafaret)))
+
+
 class Model(AttrDict):
     """
     Base class for custom user models. Provide convenience ActiveRecord
     methods such as :attr:`save`, :attr:`remove`
     """
+    __metaclass__ = ModelType
+
+    _protected_field_names = ['query_class', '__collection__', 'structure',
+                              'i18n', '_lang', 'fallback_lang']
 
     query_class = BaseQuery
 
     __collection__ = None
 
-    @classproperty
-    def query(cls):
-        return cls.query_class(database=cls.db, name=cls.__collection__,
-                               document_class=cls)
+    structure = t.Dict().allow_extra('*')
+
+    i18n = []
+
+    _lang = 'en'
+
+    fallback_lang = 'en'
 
     def __init__(self, *args, **kwargs):
         assert 'query_class' not in kwargs
@@ -199,13 +229,45 @@ class Model(AttrDict):
         assert '__collection__' not in kwargs
         super(Model, self).__init__(*args, **kwargs)
 
+    def __setattr__(self, attr, value):
+        if attr in self._protected_field_names:
+            return dict.__setattr__(self, attr, value)
+
+        if attr in self.i18n:
+            if attr not in self:
+                value = {self._lang: value}
+            else:
+                attrs = self[attr].copy()
+                attrs.update({self._lang: value})
+                value = attrs
+        value = self._make_attr_dict(value)
+        return self.__setitem__(attr, value)
+
+    def __getattr__(self, attr):
+        value = super(Model, self).__getattr__(attr)
+        if attr in self.i18n:
+            value = value.get(self._lang, value.get(self.fallback_lang, value))
+        return value
+
+    @classproperty
+    def query(cls):
+        return cls.query_class(database=cls.db, name=cls.__collection__,
+                               document_class=cls)
+
     def save(self, *args, **kwargs):
+        self.structure.check(self)
         self.query.save(self, *args, **kwargs)
         return self
 
-    def update(self, *args, **kwargs):
-        self.query.update({"_id": self._id}, self, *args, **kwargs)
-        return self
+    def update(self, spec=None, **kwargs):
+        update_options = set(['upsert', 'manipulate', 'safe', 'multi', '_check_keys'])
+        spec = spec or {}
+        new_attrs = list(kwargs.viewkeys() - update_options)
+        for k in new_attrs:
+            spec[k] = kwargs.pop(k)
+        self._setattrs(**spec)
+        self.structure.check(self)
+        return self.query.update({"_id": self._id}, self, **kwargs)
 
     def remove(self):
         return self.query.remove(self._id)
@@ -218,12 +280,11 @@ class Model(AttrDict):
     @classmethod
     def get_or_create(cls, *args, **kwargs):
         instance = cls.query.find_one(*args, **kwargs)
-        return instance or instance.create(*args, **kwargs)
+        return instance or cls.create(*args, **kwargs)
 
-
-    def __repr__(self):
-        return "<%s:%s>" % (self.__class__.__name__,
-                            getattr(self, 'id', self._id))
+    # def __repr__(self):
+    #     return "<%s:%s>" % (self.__class__.__name__,
+    #                         getattr(self, 'id', self._id))
 
     def __unicode__(self):
         return str(self).decode('utf-8')
@@ -319,3 +380,5 @@ class MongoObject(object):
     def clear(self):
         self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
         self.connection.end_request()
+
+#TODO: innerif, refactoring

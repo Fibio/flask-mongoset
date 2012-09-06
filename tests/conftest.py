@@ -125,12 +125,8 @@ class BaseModelTest(BaseTest):
         assert isinstance(child.parents[0], self.model)
 
     def test_update(self):
-        parent = self.model(test="hellotest")
-        parent.save()
-
-        parent.hello = "test"
-        parent.test = 'Hello'
-        parent.save()
+        parent = self.model.create(test="hellotest")
+        parent.update(test='Hello', hello='test')
 
         assert self.model.query.count() == 1
         parent = self.model.query.find()[0]

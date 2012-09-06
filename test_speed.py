@@ -29,18 +29,22 @@ def find_model(interval):
     for i in interval:
         SomeModel.query.find({"test.name": "testing_{}".format(i)})
 
+def update_model(interval):
+    instance = SomeModel.query.find_one({"test.name": "testing_5"})
+    for i in interval:
+        instance.update({'foo': 'bar'})
+
 
 if __name__ == '__main__':
     interval = range(1000)
-    cProfile.run('create_model(interval)')
+    create_model(range(10))
+    # cProfile.run('create_model(interval)')
     #old_version, for interval = 1000: 116059 function calls (114058 primitive calls) in 0.192-0.211 seconds
     #121059 function calls (115058 primitive calls) in 0.199 seconds
     #119059 function calls (113058 primitive calls) in 0.193-0.210 seconds
 
-    cProfile.run('find_model(interval)')
+    # cProfile.run('find_model(interval)')
     #old_version, for interval = 1000: 51003 function calls in 0.078-0.086 seconds
 
-
-
-
+    cProfile.run('update_model(interval)')
     db.clear()
