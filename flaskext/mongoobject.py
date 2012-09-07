@@ -194,7 +194,7 @@ class BaseQuery(Collection):
             for attr in self.i18n:
                 value = kwargs.pop(attr, None)
                 if value:
-                    kwargs['{}.{}'.format(lang, attr)] = value
+                    kwargs['{}.{}'.format(attr, lang)] = value
             kwargs['_lang'] = lang
             return MongoCursor(self, *args, **kwargs)
         return super(BaseQuery, self).find(*args, **kwargs)
