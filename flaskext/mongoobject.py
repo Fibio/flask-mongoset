@@ -18,6 +18,7 @@ import operator
 import trafaret as t
 from bson.dbref import DBRef
 from pymongo import Connection, ASCENDING
+from pymongo.cursor import Cursor
 from pymongo.database import Database
 from pymongo.collection import Collection
 from pymongo.son_manipulator import SONManipulator, AutoReference, NamespaceInjector
@@ -128,6 +129,7 @@ class AutoReferenceObject(AutoReference):
         self.__database = mongo.session
 
     def transform_outgoing(self, son, collection):
+
         def transform_value(value):
             if isinstance(value, DBRef):
                 return transform_value(self.__database.dereference(value))
@@ -146,8 +148,32 @@ class AutoReferenceObject(AutoReference):
                 object[key] = transform_value(value)
             return object
 
-        value = transform_dict(son)
-        return value
+        son = transform_dict(son)
+        return son
+
+
+class MongoCursor(Cursor):
+    """
+    A cursor that will return an instance of :attr:`as_class` with
+    provided lang
+    """
+    def __init__(self, *args, **kwargs):
+        self.as_class = kwargs.get('as_class')
+        self._lang = kwargs.pop('_lang')
+        super(MongoCursor, self).__init__(*args, **kwargs)
+
+    def next(self):
+        data = super(MongoCursor, self).next()
+        data._lang = self._lang
+        return data
+
+    def __getitem__(self, index):
+        item = super(MongoCursor, self).__getitem__(index)
+        if isinstance(index, slice):
+            return item
+        else:
+            item._lang = self._lang
+            return item
 
 
 class BaseQuery(Collection):
@@ -162,13 +188,15 @@ class BaseQuery(Collection):
         super(BaseQuery, self).__init__(*args, **kwargs)
 
     def find(self, *args, **kwargs):
+        kwargs['as_class'] = self.document_class
         if self.i18n:
-            lang = kwargs.pop('_lang', self.document_class._fallback_lang)
+            lang = kwargs.get('_lang', self.document_class._fallback_lang)
             for attr in self.i18n:
                 value = kwargs.pop(attr, None)
                 if value:
                     kwargs['{}.{}'.format(lang, attr)] = value
-        kwargs['as_class'] = self.document_class
+            kwargs['_lang'] = lang
+            return MongoCursor(self, *args, **kwargs)
         return super(BaseQuery, self).find(*args, **kwargs)
 
     def get_or_404(self, id):
@@ -185,6 +213,20 @@ class BaseQuery(Collection):
 class ModelType(type):
     """ Ghanges validation rules for transleted attrs
     """
+    def __new__(cls, name, bases, dct):
+        # inheritance:
+        for model in bases:
+            if getattr(model, '__abstract__', None) is True:
+                dct.update({'__abstract__': False})
+                i18n = list(set(getattr(model, 'i18n', []))|set(dct.get('i18n', [])))
+                i18n and dct.update({'i18n': i18n})
+                #             # inheritance base attrs:
+                # dct.get('i18n', [])
+                # i18n = list(set())
+
+                break
+        return type.__new__(cls, name, bases, dct)
+
     def __init__(cls, name, bases, dct):
         # change structure:
         if cls.structure:
@@ -203,15 +245,12 @@ class ModelType(type):
 
             # add indexes:
             if cls.indexes:
-                if isinstance(cls.indexes, list):
-                    for index in cls.indexes[:]:
-                        if isinstance(index, str):
-                            cls.indexes.remove(index)
-                            cls.indexes.append((index, ASCENDING))
-            cls.indexes and cls.query.ensure_index(cls.indexes)
+                for index in cls.indexes[:]:
+                    if isinstance(index, str):
+                        cls.indexes.remove(index)
+                        cls.indexes.append((index, ASCENDING))
 
-
-
+                cls.db and cls.query.ensure_index(cls.indexes)
 
 
 class Model(AttrDict):
@@ -227,12 +266,14 @@ class Model(AttrDict):
 
     _protected_field_names = ['query_class', '__collection__', 'structure',
                               'i18n', '_lang', '_fallback_lang', 'use_autorefs',
-                              'inc_id', '__abstract__']
-    _lang = 'en'
+                              'inc_id', '__abstract__', 'db']
+    _lang = 'en'#None
 
-    _fallback_lang = 'en'
+    _fallback_lang = 'en'#None
 
     i18n = []
+
+    db = None
 
     indexes = None
 
@@ -245,14 +286,14 @@ class Model(AttrDict):
     inc_id = False
 
     def __init__(self, *args, **kwargs):
+        self._lang = kwargs.pop('_lang', self._fallback_lang)
         for field in self._protected_field_names:
             assert field not in kwargs
-        super(Model, self).__init__(*args, **kwargs)
+        return super(Model, self).__init__(*args, **kwargs)
 
     def __setattr__(self, attr, value):
         if attr in self._protected_field_names:
             return dict.__setattr__(self, attr, value)
-
         if attr in self.i18n:
             if attr not in self:
                 value = {self._lang: value}
@@ -303,7 +344,8 @@ class Model(AttrDict):
 
     def __repr__(self):
         return "<%s:%s>" % (self.__class__.__name__,
-                            getattr(self, 'id', self._id))
+                            super(Model, self).__repr__())
+                            # getattr(self, 'id', self._id))
 
     def __unicode__(self):
         return str(self).decode('utf-8')
@@ -322,11 +364,12 @@ class MongoObject(object):
         app.config.setdefault('MONGODB_DATABASE', "")
         app.config.setdefault('MONGODB_AUTOREF', True)
         app.config.setdefault('AUTOINCREMENT', True)
-        # initialize connection and Model properties
+        app.config.setdefault('FALLBACK_LANG', 'en')
         self.app = app
         self.connect()
         self.app.after_request(self.close_connection)
         self.Model.db = self.session
+        self.Model._fallback_lang = app.config.get('FALLBACK_LANG')
 
     def connect(self):
         """Connect to the MongoDB server and register the documents from
@@ -371,8 +414,12 @@ class MongoObject(object):
 
         :param documents: A :class:`list` of :class:`mongoobject.Model`.
         """
-        [setattr(model, 'db', self.session) for model in models \
-        if not getattr(model, 'db', None) or not isinstance(model.db, Database)]
+
+        for model in models:
+            if not getattr(model, 'db', None) or not isinstance(model.db, Database):
+                setattr(model, 'db', self.session)
+            setattr(model, '_fallback_lang', self.app.config.get('FALLBACK_LANG'))
+            model.indexes and model.query.ensure_index(model.indexes)
         return len(models) == 1 and models[0] or models
 
     @property

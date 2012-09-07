@@ -4,7 +4,31 @@ from conftest import BaseTest
 from flaskext.mongoobject import Model
 
 
-class i18nModel(Model):
+# class i18nModel(Model):
+#     __collection__ = "i18ntests"
+#     structure = t.Dict({
+#         'name': t.String,
+#         'quantity': t.Int,
+#         'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
+#         'list_attrs': t.List(t.String)
+#     }).allow_extra('*')
+#     i18n = ['name', 'attrs', 'list_attrs']
+#     inc_id = True
+#     indexes = ['id' , ('quantity', DESCENDING) ]
+
+class BaseModel(Model):
+    __abstract__ = True
+    # structure = t.Dict({
+    #     'name': t.String,
+    #     'quantity': t.Int,
+    #     'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
+    #     'list_attrs': t.List(t.String)
+    # }).allow_extra('*')
+    i18n = ['name', 'attrs']
+    # inc_id = True
+    indexes = ['id' , ('quantity', DESCENDING)]
+
+class i18nModel(BaseModel):
     __collection__ = "i18ntests"
     structure = t.Dict({
         'name': t.String,
@@ -12,7 +36,7 @@ class i18nModel(Model):
         'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
         'list_attrs': t.List(t.String)
     }).allow_extra('*')
-    i18n = ['name', 'attrs', 'keys']
+    i18n = ['list_attrs']
     inc_id = True
     indexes = ['id' , ('quantity', DESCENDING) ]
 
@@ -57,16 +81,20 @@ class TestValidation(BaseTest):
         assert result.name == 'Name'
         result._lang = 'fr'
         result.update({'name': 'Nom'})
+
+        # attr name translated but not feature and list_attrs:
         assert result.name == 'Nom'
         assert result.attrs.feature == 'ice'
+        assert result.list_attrs == ['one', 'two']
+
+        result.update({'attrs': {'feature': 'glace', 'revision': 1}})
+        result.update({'list_attrs': ['un', 'deux']})
 
         result = self.model.query.find_one(**{'name': 'Nom', '_lang': 'fr'})
-        assert result.name == 'Name'
-        result._lang = 'fr'
-        assert result.name == 'Nom'
-        result.update({'attrs': {'feature': 'glace', 'revision': 1}})
         assert result.attrs.feature == 'glace'
-        assert result.list_attrs == ['one', 'two']
+        assert result.list_attrs == ['un', 'deux']
 
         result = self.model.query.find(_lang='en', **{'attrs.feature': 'ice'})[0]
         assert result.attrs.feature == 'ice'
+        assert result.name == 'Name'
+        assert result.list_attrs == ['one', 'two']
