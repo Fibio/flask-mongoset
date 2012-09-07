@@ -362,9 +362,9 @@ class Model(AttrDict):
 class MongoObject(object):
 
     def __init__(self, app=None):
+        self.Model = Model
         if app is not None:
             self.init_app(app)
-        self.Model = Model
 
     def init_app(self, app):
         app.config.setdefault('MONGODB_HOST', "localhost")
