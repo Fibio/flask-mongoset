@@ -31,7 +31,8 @@ setup(
     install_requires=[
         'setuptools',
         'Flask',
-        'pymongo'
+        'pymongo',
+        'https://github.com/nimnull/trafaret/zipball/master#egg=trafaret'
     ],
     test_suite='mongoobject_test.flask_mongoobject',
     classifiers=[

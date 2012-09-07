@@ -4,41 +4,24 @@ from conftest import BaseTest
 from flaskext.mongoobject import Model
 
 
-# class i18nModel(Model):
-#     __collection__ = "i18ntests"
-#     structure = t.Dict({
-#         'name': t.String,
-#         'quantity': t.Int,
-#         'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
-#         'list_attrs': t.List(t.String)
-#     }).allow_extra('*')
-#     i18n = ['name', 'attrs', 'list_attrs']
-#     inc_id = True
-#     indexes = ['id' , ('quantity', DESCENDING) ]
-
 class BaseModel(Model):
     __abstract__ = True
-    # structure = t.Dict({
-    #     'name': t.String,
-    #     'quantity': t.Int,
-    #     'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
-    #     'list_attrs': t.List(t.String)
-    # }).allow_extra('*')
-    i18n = ['name', 'attrs']
-    # inc_id = True
-    indexes = ['id' , ('quantity', DESCENDING)]
-
-class i18nModel(BaseModel):
-    __collection__ = "i18ntests"
     structure = t.Dict({
         'name': t.String,
         'quantity': t.Int,
         'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
+    }).allow_extra('*')
+    i18n = ['name', 'attrs']
+    indexes = ['id']
+
+class i18nModel(BaseModel):
+    __collection__ = "i18ntests"
+    inc_id = True
+    structure = t.Dict({
         'list_attrs': t.List(t.String)
     }).allow_extra('*')
     i18n = ['list_attrs']
-    inc_id = True
-    indexes = ['id' , ('quantity', DESCENDING) ]
+    indexes = [('quantity', DESCENDING), 'name' ]
 
 
 class TestValidation(BaseTest):

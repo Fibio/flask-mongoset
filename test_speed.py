@@ -38,14 +38,15 @@ def update_model(interval):
 
 if __name__ == '__main__':
     interval = range(1000)
-    create_model(range(10))
-    # cProfile.run('create_model(interval)')
+    cProfile.run('create_model(interval)')
     #old_version, for interval = 1000: 116059 function calls (114058 primitive calls) in 0.192-0.211 seconds
-    #121059 function calls (115058 primitive calls) in 0.199 seconds
-    #119059 function calls (113058 primitive calls) in 0.193-0.210 seconds
+    #new with translation, for interval = 1000: 151006 function calls (146006 primitive calls) in 0.289-0.302 seconds
 
-    # cProfile.run('find_model(interval)')
+    cProfile.run('find_model(interval)')
     #old_version, for interval = 1000: 51003 function calls in 0.078-0.086 seconds
+    #new with translation, for interval = 1000:  51003 function calls in 0.079-0.085 seconds
 
     cProfile.run('update_model(interval)')
+    #new : 127161 function calls in 0.285 seconds
+
     db.clear()

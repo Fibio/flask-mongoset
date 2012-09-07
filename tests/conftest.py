@@ -81,19 +81,19 @@ class BaseModelTest(BaseTest):
         try:
             self.model({"query_class": "Hello"})
             assert False
-        except AssertionError:
+        except AttributeError:
             assert True
 
         try:
             self.model({"query": "Hello"})
             assert False
-        except AssertionError:
+        except AttributeError:
             assert True
 
         try:
             self.model({"__collection__": "Hello"})
             assert False
-        except AssertionError:
+        except AttributeError:
             assert True
 
     def test_handle_auto_dbref(self):

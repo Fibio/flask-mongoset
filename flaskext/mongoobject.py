@@ -34,7 +34,6 @@ autoref_collections = {}
 class AuthenticationIncorrect(Exception):
     pass
 
-
 class ClassProperty(property):
     def __init__(self, method, *args, **kwargs):
         method = classmethod(method)
@@ -53,7 +52,7 @@ class AttrDict(dict):
     like a dict `x['y']` and like an object `x.y`
     """
     def __init__(self, initial=None, **kwargs):
-        initial and self._setattrs(**initial)
+        initial and kwargs.update(initial)
         self._setattrs(**kwargs)
 
     def __getattr__(self, attr):
@@ -129,26 +128,27 @@ class AutoReferenceObject(AutoReference):
         self.__database = mongo.session
 
     def transform_outgoing(self, son, collection):
+        if collection.name in autoref_collections:
+            def transform_value(value):
 
-        def transform_value(value):
-            if isinstance(value, DBRef):
-                return transform_value(self.__database.dereference(value))
-            elif isinstance(value, list):
-                return map(transform_value, value)
-            elif isinstance(value, dict):
-                if value.get('_ns', None):
-                    cls = autoref_collections.get(value['_ns'], None)
-                    if cls:
-                        return cls(transform_dict(value))
-                return transform_dict(value)
-            return value
+                if isinstance(value, DBRef):
+                    return transform_value(self.__database.dereference(value))
+                elif isinstance(value, list):
+                    return map(transform_value, value)
+                elif isinstance(value, dict):
+                    if value.get('_ns', None):
+                        cls = autoref_collections.get(value['_ns'], None)
+                        if cls:
+                            return cls(transform_dict(value))
+                    return transform_dict(value)
+                return value
 
-        def transform_dict(object):
-            for (key, value) in object.items():
-                object[key] = transform_value(value)
-            return object
+            def transform_dict(object):
+                for (key, value) in object.items():
+                    object[key] = transform_value(value)
+                return object
 
-        son = transform_dict(son)
+            son = transform_dict(son)
         return son
 
 
@@ -214,27 +214,34 @@ class ModelType(type):
     """ Ghanges validation rules for transleted attrs
     """
     def __new__(cls, name, bases, dct):
+        #  change structure:
+        structure = dct.get('structure')
+        if structure and dct.get('i18n'):
+            for key in structure.keys[:]:
+                if key.name in dct['i18n']:
+                    dct['structure'].keys.remove(key)
+                    dct['structure'].keys.append(t.Key(key.name,
+                                              trafaret=t.Mapping(t.String, key.trafaret)))
+
         # inheritance:
         for model in bases:
             if getattr(model, '__abstract__', None) is True:
                 dct.update({'__abstract__': False})
-                i18n = list(set(getattr(model, 'i18n', []))|set(dct.get('i18n', [])))
-                i18n and dct.update({'i18n': i18n})
-                #             # inheritance base attrs:
-                # dct.get('i18n', [])
-                # i18n = list(set())
-
+                base_attrs = ['i18n', 'indexes']
+                for attr in base_attrs:
+                    total = list(set(getattr(model, attr, []))|set(dct.get(attr, [])))
+                    total and dct.update({attr: total})
+                if model.structure and structure is not None:
+                    new_structure = list(set(model.structure.keys)|set(structure.keys))
+                    dct['structure'].keys = new_structure
                 break
         return type.__new__(cls, name, bases, dct)
 
     def __init__(cls, name, bases, dct):
-        # change structure:
-        if cls.structure:
-            for key in cls.structure.keys[:]:
-                if key.name in cls.i18n:
-                    cls.structure.keys.remove(key)
-                    cls.structure.keys.append(t.Key(key.name,
-                                              trafaret=t.Mapping(t.String, key.trafaret)))
+        # set protected_field_names:
+        protected_field_names = set(['_protected_field_names'])
+        names = [model.__dict__.keys() for model in cls.__mro__]
+        cls._protected_field_names = list(protected_field_names.union(*names))
 
         if not getattr(cls, '__abstract__', False):
             # add model into DBrefs register:
@@ -264,12 +271,11 @@ class Model(AttrDict):
 
     __abstract__ = False
 
-    _protected_field_names = ['query_class', '__collection__', 'structure',
-                              'i18n', '_lang', '_fallback_lang', 'use_autorefs',
-                              'inc_id', '__abstract__', 'db']
-    _lang = 'en'#None
+    _protected_field_names = None
 
-    _fallback_lang = 'en'#None
+    _lang = None
+
+    _fallback_lang = None
 
     i18n = []
 
@@ -285,11 +291,13 @@ class Model(AttrDict):
 
     inc_id = False
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, doc=None, **kwargs):
+        doc and kwargs.update(doc)
         self._lang = kwargs.pop('_lang', self._fallback_lang)
         for field in self._protected_field_names:
-            assert field not in kwargs
-        return super(Model, self).__init__(*args, **kwargs)
+            if field in kwargs:
+                raise AttributeError("Forbidden attribute name %s for model %s" % (field, self.__class__.__name__ ))
+        return super(Model, self).__init__(**kwargs)
 
     def __setattr__(self, attr, value):
         if attr in self._protected_field_names:
@@ -392,7 +400,7 @@ class MongoObject(object):
                 self.app.config.get('MONGODB_USERNAME'),
                 self.app.config.get('MONGODB_PASSWORD'))
             if not auth_success:
-                raise AuthenticationIncorrect
+                raise AuthenticationIncorrect("can't connect to data base, wrong user_name or password")
 
     def register(self, *models):
         """Register one or more :class:`mongoobject.Model` instances to the
@@ -440,5 +448,3 @@ class MongoObject(object):
     def clear(self):
         self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
         self.connection.end_request()
-
-#TODO: innerif, refactoring
