@@ -22,9 +22,11 @@ class TestModelDecorator(BaseModelTest):
         class NewModel(Model):
             __collection__ = 'decotests'
             inc_id = True
+            indexes = ['id', 'name']
         self.model = NewModel
 
     def test_autoincrement(self):
         result = self.model.create(name='Hello')
         assert result.id == 1
+
 

@@ -1,4 +1,5 @@
 import trafaret as t
+from pymongo import DESCENDING
 from conftest import BaseTest
 from flaskext.mongoobject import Model
 
@@ -12,6 +13,8 @@ class i18nModel(Model):
         'list_attrs': t.List(t.String)
     }).allow_extra('*')
     i18n = ['name', 'attrs', 'keys']
+    inc_id = True
+    indexes = ['id' , ('quantity', DESCENDING) ]
 
 
 class TestValidation(BaseTest):

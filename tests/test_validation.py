@@ -8,6 +8,7 @@ class ValidateModel(Model):
     structure = t.Dict({
     'key': t.String(),
     t.Key('quantity'): t.Int}).allow_extra('_id', '_ns')
+    indexes = "quantity"
 
 
 class TestValidation(BaseTest):

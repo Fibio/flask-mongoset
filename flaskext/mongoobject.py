@@ -17,7 +17,7 @@ from __future__ import absolute_import
 import operator
 import trafaret as t
 from bson.dbref import DBRef
-from pymongo import Connection
+from pymongo import Connection, ASCENDING
 from pymongo.database import Database
 from pymongo.collection import Collection
 from pymongo.son_manipulator import SONManipulator, AutoReference, NamespaceInjector
@@ -197,8 +197,20 @@ class ModelType(type):
         if not getattr(cls, '__abstract__', False):
             # add model into DBrefs register:
             cls.use_autorefs and autoref_collections.__setitem__(cls.__collection__, cls)
-            # add model into autoincrement_id register
+
+            # add model into autoincrement_id register:
             cls.inc_id and inc_collections.add(cls.__collection__)
+
+            # add indexes:
+            if cls.indexes:
+                if isinstance(cls.indexes, list):
+                    for index in cls.indexes[:]:
+                        if isinstance(index, str):
+                            cls.indexes.remove(index)
+                            cls.indexes.append((index, ASCENDING))
+            cls.indexes and cls.query.ensure_index(cls.indexes)
+
+
 
 
 
@@ -220,12 +232,13 @@ class Model(AttrDict):
 
     _fallback_lang = 'en'
 
+    i18n = []
+
+    indexes = None
 
     query_class = BaseQuery
 
     structure = t.Dict().allow_extra('*')
-
-    i18n = []
 
     use_autorefs = True
 
@@ -381,4 +394,4 @@ class MongoObject(object):
         self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
         self.connection.end_request()
 
-#TODO: innerif, indexing, refactoring
+#TODO: innerif, refactoring
