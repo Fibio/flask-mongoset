@@ -32,7 +32,7 @@ setup(
         'setuptools',
         'Flask',
         'pymongo',
-        'https://github.com/nimnull/trafaret/zipball/master#egg=trafaret',
+        'trafaret',
     ],
     test_suite='mongoobject_test.flask_mongoobject',
     classifiers=[
