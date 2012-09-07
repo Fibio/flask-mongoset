@@ -12,13 +12,9 @@ TESTING = True
 class SomeModel(Model):
     __collection__ = "tests"
 
-db.set_mapper(SomeModel)
-
 
 class SomedbModel(db.Model):
     __collection__ = "dbtests"
-
-db.set_mapper(SomedbModel)
 
 
 class BaseTest(object):

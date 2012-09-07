@@ -3,8 +3,8 @@ from conftest import BaseTest
 from flaskext.mongoobject import Model
 
 
-class SomeModel(Model):
-    __collection__ = "tests"
+class ValidateModel(Model):
+    __collection__ = "validation_tests"
     structure = t.Dict({
     'key': t.String(),
     t.Key('quantity'): t.Int}).allow_extra('_id', '_ns')
@@ -12,7 +12,7 @@ class SomeModel(Model):
 
 class TestValidation(BaseTest):
 
-    model = SomeModel
+    model = ValidateModel
 
     def setUp(self):
         super(TestValidation, self).setUp()

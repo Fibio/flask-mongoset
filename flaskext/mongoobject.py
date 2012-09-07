@@ -27,6 +27,8 @@ from flask import abort
 
 inc_collections = set([])
 
+autoref_collections = {}
+
 
 class AuthenticationIncorrect(Exception):
     pass
@@ -42,14 +44,6 @@ class ClassProperty(property):
 
 
 classproperty = ClassProperty
-
-
-def autoincrement(cls):
-    """ Adds collection name in inc_collections register to
-    AutoincrementId works
-    """
-    inc_collections.add(cls.__collection__)
-    return cls
 
 
 class AttrDict(dict):
@@ -141,8 +135,7 @@ class AutoReferenceObject(AutoReference):
                 return map(transform_value, value)
             elif isinstance(value, dict):
                 if value.get('_ns', None):
-                    # if the collection has a :class:`Model` mapper
-                    cls = self.mongo.mapper.get(value['_ns'], None)
+                    cls = autoref_collections.get(value['_ns'], None)
                     if cls:
                         return cls(transform_dict(value))
                 return transform_dict(value)
@@ -170,7 +163,7 @@ class BaseQuery(Collection):
 
     def find(self, *args, **kwargs):
         if self.i18n:
-            lang = kwargs.pop('_lang', self.document_class.fallback_lang)
+            lang = kwargs.pop('_lang', self.document_class._fallback_lang)
             for attr in self.i18n:
                 value = kwargs.pop(attr, None)
                 if value:
@@ -193,12 +186,20 @@ class ModelType(type):
     """ Ghanges validation rules for transleted attrs
     """
     def __init__(cls, name, bases, dct):
+        # change structure:
         if cls.structure:
             for key in cls.structure.keys[:]:
                 if key.name in cls.i18n:
                     cls.structure.keys.remove(key)
                     cls.structure.keys.append(t.Key(key.name,
                                               trafaret=t.Mapping(t.String, key.trafaret)))
+
+        if not getattr(cls, '__abstract__', False):
+            # add model into DBrefs register:
+            cls.use_autorefs and autoref_collections.__setitem__(cls.__collection__, cls)
+            # add model into autoincrement_id register
+            cls.inc_id and inc_collections.add(cls.__collection__)
+
 
 
 class Model(AttrDict):
@@ -208,25 +209,31 @@ class Model(AttrDict):
     """
     __metaclass__ = ModelType
 
+    __collection__ = None
+
+    __abstract__ = False
+
     _protected_field_names = ['query_class', '__collection__', 'structure',
-                              'i18n', '_lang', 'fallback_lang']
+                              'i18n', '_lang', '_fallback_lang', 'use_autorefs',
+                              'inc_id', '__abstract__']
+    _lang = 'en'
+
+    _fallback_lang = 'en'
+
 
     query_class = BaseQuery
-
-    __collection__ = None
 
     structure = t.Dict().allow_extra('*')
 
     i18n = []
 
-    _lang = 'en'
+    use_autorefs = True
 
-    fallback_lang = 'en'
+    inc_id = False
 
     def __init__(self, *args, **kwargs):
-        assert 'query_class' not in kwargs
-        assert 'query' not in kwargs
-        assert '__collection__' not in kwargs
+        for field in self._protected_field_names:
+            assert field not in kwargs
         super(Model, self).__init__(*args, **kwargs)
 
     def __setattr__(self, attr, value):
@@ -240,13 +247,12 @@ class Model(AttrDict):
                 attrs = self[attr].copy()
                 attrs.update({self._lang: value})
                 value = attrs
-        value = self._make_attr_dict(value)
-        return self.__setitem__(attr, value)
+        return super(Model, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
         value = super(Model, self).__getattr__(attr)
         if attr in self.i18n:
-            value = value.get(self._lang, value.get(self.fallback_lang, value))
+            value = value.get(self._lang, value.get(self._fallback_lang, value))
         return value
 
     @classproperty
@@ -269,7 +275,7 @@ class Model(AttrDict):
         self.structure.check(self)
         return self.query.update({"_id": self._id}, self, **kwargs)
 
-    def remove(self):
+    def delete(self):
         return self.query.remove(self._id)
 
     @classmethod
@@ -280,11 +286,11 @@ class Model(AttrDict):
     @classmethod
     def get_or_create(cls, *args, **kwargs):
         instance = cls.query.find_one(*args, **kwargs)
-        return instance or cls.create(*args, **kwargs)
+        return instance or kwargs.pop('_lang', True) and cls.create(*args, **kwargs)
 
-    # def __repr__(self):
-    #     return "<%s:%s>" % (self.__class__.__name__,
-    #                         getattr(self, 'id', self._id))
+    def __repr__(self):
+        return "<%s:%s>" % (self.__class__.__name__,
+                            getattr(self, 'id', self._id))
 
     def __unicode__(self):
         return str(self).decode('utf-8')
@@ -296,7 +302,6 @@ class MongoObject(object):
         if app is not None:
             self.init_app(app)
         self.Model = Model
-        self.mapper = {}
 
     def init_app(self, app):
         app.config.setdefault('MONGODB_HOST', "localhost")
@@ -368,11 +373,6 @@ class MongoObject(object):
                 self.db.add_son_manipulator(AutoincrementId())
         return self.db
 
-    def set_mapper(self, model):
-        # Set up mapper for model, so when ew retrieve documents from database,
-        # we will know how to map them to model object based on `_ns` fields
-        self.mapper[model.__collection__] = model
-
     def close_connection(self, response):
         self.connection.end_request()
         return response
@@ -381,4 +381,4 @@ class MongoObject(object):
         self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
         self.connection.end_request()
 
-#TODO: innerif, refactoring
+#TODO: innerif, indexing, refactoring

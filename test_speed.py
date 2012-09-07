@@ -10,8 +10,6 @@ TESTING = True
 class SomeModel(db.Model):
     __collection__ = "tests"
 
-db.set_mapper(SomeModel)
-
 
 app.config['MONGODB_HOST'] = "mongodb://localhost:27017"
 app.config['MONGODB_DATABASE'] = "testdb"
@@ -20,14 +18,17 @@ app.config['AUTOINCREMENT'] = False
 app.config['TESTING'] = True
 db.init_app(app)
 
+
 def create_model(interval):
     for i in interval:
         model = SomeModel({"test": {"name": "testing_{}".format(i)}})
         model.save()
 
+
 def find_model(interval):
     for i in interval:
         SomeModel.query.find({"test.name": "testing_{}".format(i)})
+
 
 def update_model(interval):
     instance = SomeModel.query.find_one({"test.name": "testing_5"})

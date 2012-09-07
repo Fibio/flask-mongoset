@@ -1,4 +1,4 @@
-from flaskext.mongoobject import Model, autoincrement
+from flaskext.mongoobject import Model
 from conftest import BaseModelTest, SomeModel, SomedbModel
 
 
@@ -19,10 +19,9 @@ class TestModelDecorator(BaseModelTest):
     def setUp(self):
         super(TestModelDecorator, self).setUp()
         @self.db.register
-        @autoincrement
         class NewModel(Model):
             __collection__ = 'decotests'
-        self.db.set_mapper(NewModel)
+            inc_id = True
         self.model = NewModel
 
     def test_autoincrement(self):
