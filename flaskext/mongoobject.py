@@ -194,8 +194,10 @@ class BaseQuery(Collection):
             for attr in self.i18n:
                 value = kwargs.pop(attr, None)
                 if value:
-                    kwargs['{}.{}'.format(attr, lang)] = value
+                    kwargs["{}.{}".format(attr, lang)] = value
             kwargs['_lang'] = lang
+            dct = kwargs.copy()
+            self._make_attrs(kwargs)
             return MongoCursor(self, *args, **kwargs)
         return super(BaseQuery, self).find(*args, **kwargs)
 
@@ -209,6 +211,16 @@ class BaseQuery(Collection):
         cursor = self.find(*args, **kwargs)
         return not cursor.count() == 0 and cursor or abort(404)
 
+    def _make_attrs(self, kwargs):
+        dct = kwargs.copy()
+        for attr, value in dct.iteritems():
+            if isinstance(value, dict):
+                kwargs.pop(attr)
+                value = self._make_attrs(value)
+                for k, v in value.iteritems():
+                    key = "{}.{}".format(attr, k)
+                    kwargs[key] = v
+        return kwargs
 
 class ModelType(type):
     """ Ghanges validation rules for transleted attrs
