@@ -82,3 +82,8 @@ class TestValidation(BaseTest):
         assert result.name == 'Name'
         assert result.list_attrs == ['one', 'two']
         assert not self.model.query.find({'attrs.feature': 'something else'}).count()
+
+        assert self.model.get_or_create({'name': 'Nom', 'quantity': 1,
+                                         'attrs': {'feature': 'glace', 'revision': 1},
+                                         'list_attrs': ['un', 'deux']}, _lang='fr')
+        assert self.model.query.count() == 1
