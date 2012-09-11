@@ -136,7 +136,6 @@ class AutoReferenceObject(AutoReference):
     def transform_outgoing(self, son, collection):
         if collection.name in autoref_collections:
             def transform_value(value):
-
                 if isinstance(value, DBRef):
                     return transform_value(self.__database.dereference(value))
                 elif isinstance(value, list):

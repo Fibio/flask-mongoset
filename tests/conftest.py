@@ -1,5 +1,6 @@
 from operator import methodcaller, attrgetter
 import flask
+from bson.dbref import DBRef
 from werkzeug.exceptions import NotFound
 from flaskext.mongoobject import MongoObject, Model
 
@@ -15,6 +16,7 @@ class SomeModel(Model):
 
 class SomedbModel(db.Model):
     __collection__ = "dbtests"
+    use_autorefs = True
 
 
 class BaseTest(object):
@@ -81,6 +83,16 @@ class BaseModelTest(BaseTest):
         result = self.model.get_or_create(test='test')
         assert result == self.model.query.find_one(test='test')
 
+    def test_update(self):
+        result = self.model.create(test="hellotest")
+        result.update(test='Hello', hello='test')
+
+        assert self.model.query.count() == 1
+        result = self.model.query.find()[0]
+        assert result.hello == "test"
+        assert result.test == "Hello"
+        assert isinstance(result, self.model)
+
     def test_not_override_default_variables(self):
         try:
             self.model({"query_class": "Hello"})
@@ -124,16 +136,12 @@ class BaseModelTest(BaseTest):
         assert isinstance(child, self.model)
         assert isinstance(child.parents[0], self.model)
 
-    def test_update(self):
-        parent = self.model.create(test="hellotest")
-        parent.update(test='Hello', hello='test')
+        parent = self.model(test="test_two")
+        parent.save()
+        child.update({'parents': [DBRef(parent.__collection__, parent._id)]})
 
-        assert self.model.query.count() == 1
-        parent = self.model.query.find()[0]
-        assert parent.hello == "test"
-        assert parent.test == "Hello"
-        assert isinstance(parent, self.model)
-
+        child = self.model.query.find_one({"test": "testing"})
+        assert child.parents[0].test == "test_two"
 
     def test_404(self):
         try:
