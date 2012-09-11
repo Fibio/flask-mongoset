@@ -19,7 +19,7 @@ class SubModel(BaseModel):
     structure = t.Dict({
         'list_attrs': t.List(t.String)
     }).allow_extra('*')
-    indexes = [('quantity', DESCENDING), 'name' ]
+    indexes = [('quantity', DESCENDING), 'name']
 
 
 class TestValidation(BaseTest):

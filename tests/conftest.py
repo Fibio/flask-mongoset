@@ -124,6 +124,11 @@ class BaseModelTest(BaseTest):
         assert isinstance(child, self.model)
         assert isinstance(child.parent, self.model)
 
+    def test_handle_auto_dbref_after_create(self):
+        parent = self.model.create(test="hello")
+        child = self.model.create(test="test", parent=parent)
+        assert child.parent.test == "hello"
+
     def test_handle_auto_dbref_inside_a_list(self):
         parent = self.model(test="hellotest")
         parent.save()
@@ -138,9 +143,7 @@ class BaseModelTest(BaseTest):
 
         parent = self.model(test="test_two")
         parent.save()
-        child.update({'parents': [DBRef(parent.__collection__, parent._id)]})
-
-        child = self.model.query.find_one({"test": "testing"})
+        child = child.update_with_reload({'parents': [DBRef(parent.__collection__, parent._id)]})
         assert child.parents[0].test == "test_two"
 
     def test_404(self):

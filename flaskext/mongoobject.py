@@ -362,7 +362,13 @@ class Model(AttrDict):
             spec[k] = kwargs.pop(k)
         self._setattrs(**spec)
         self.structure.check(self)
-        return self.query.update({"_id": self._id}, self, **kwargs)
+        self.query.update({"_id": self._id}, self, **kwargs)
+        return self
+
+    def update_with_reload(self, spec=None, **kwargs):
+        # hack to return self with autorefs after update
+        self.update(spec, **kwargs)
+        return self.query.find_one({'_id': self._id}, _lang=self._lang)
 
     def delete(self):
         return self.query.remove(self._id)
