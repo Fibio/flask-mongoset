@@ -14,6 +14,7 @@ https://github.com/namlook/mongokit
 :license: MIT, see LICENSE for more details.
 """
 from __future__ import absolute_import
+import copy
 import operator
 import trafaret as t
 from bson.dbref import DBRef
@@ -34,6 +35,11 @@ autoref_collections = {}
 class AuthenticationIncorrect(Exception):
     pass
 
+
+class InitDataError(Exception):
+    pass
+
+
 class ClassProperty(property):
     def __init__(self, method, *args, **kwargs):
         method = classmethod(method)
@@ -52,8 +58,8 @@ class AttrDict(dict):
     like a dict `x['y']` and like an object `x.y`
     """
     def __init__(self, initial=None, **kwargs):
-        initial and kwargs.update(initial)
-        self._setattrs(**kwargs)
+        initial and kwargs.update(**initial)
+        return self._setattrs(**kwargs)
 
     def __getattr__(self, attr):
         return self._change_method('__getitem__', attr)
@@ -88,7 +94,7 @@ class AttrDict(dict):
 class AutoincrementId(SONManipulator):
     """ Creates objects id as integer and autoincrement it,
         if "id" not in son object.
-        But not usefull with DBRefs if DBRefs are based on "id" not "id_"
+        But not usefull with DBRefs, DBRefs could't be based on this "id"
     """
     def transform_incoming(self, son, collection):
         if collection.name in inc_collections:
@@ -160,7 +166,7 @@ class MongoCursor(Cursor):
     def __init__(self, *args, **kwargs):
         self.as_class = kwargs.get('as_class')
         self._lang = kwargs.pop('_lang')
-        super(MongoCursor, self).__init__(*args, **kwargs)
+        return super(MongoCursor, self).__init__(*args, **kwargs)
 
     def next(self):
         data = super(MongoCursor, self).next()
@@ -178,8 +184,9 @@ class MongoCursor(Cursor):
 
 class BaseQuery(Collection):
     """
-    `BaseQuery` extends :class:`pymongo.Collection` that adds :as_class: parameter
-    into parameters of pymongo find method
+    `BaseQuery` extends :class:`pymongo.Collection` that adds :_lang: parameter
+    to response instance via MongoCursor. If attr i18n not in model, so model doesn't need translation,
+    pymongo.Collection will use
     """
 
     def __init__(self, *args, **kwargs):
@@ -189,20 +196,24 @@ class BaseQuery(Collection):
 
     def find(self, *args, **kwargs):
         kwargs['as_class'] = self.document_class
+        if args and args[0]:
+            spec = args[0]
         if self.i18n:
-            lang = kwargs.get('_lang', self.document_class._fallback_lang)
-            for attr in self.i18n:
-                value = kwargs.pop(attr, None)
-                if value:
-                    kwargs["{}.{}".format(attr, lang)] = value
-            kwargs['_lang'] = lang
-            dct = kwargs.copy()
-            self._make_attrs(kwargs)
-            return MongoCursor(self, *args, **kwargs)
+            if not isinstance(spec, dict):
+                raise TypeError("first argument must be an instance of dict")
+
+            lang = kwargs.pop('_lang', self.document_class._fallback_lang)
+            for attr in spec.copy():
+                attrs = attr.split('.')
+                if attrs[0] in self.i18n:
+                    attrs.insert(1, lang)
+                    spec['.'.join(attrs)] = spec.pop(attr)
+            self._make_attrs(spec)
+            return MongoCursor(self, spec=spec, as_class=self.document_class, _lang=lang)
         return super(BaseQuery, self).find(*args, **kwargs)
 
     def get_or_404(self, id):
-        return self.find_one(id) or abort(404)
+        return self.find_one(id=id) or abort(404)
 
     def find_one_or_404(self, *args, **kwargs):
         return self.find_one(*args, **kwargs) or abort(404)
@@ -222,8 +233,11 @@ class BaseQuery(Collection):
                     kwargs[key] = v
         return kwargs
 
+
 class ModelType(type):
-    """ Ghanges validation rules for transleted attrs
+    """ Changes validation rules for transleted attrs.
+        Implements inheritance for attrs :i18n:, :indexes: and :structure: from __abstract__ model
+        Adds :_protected_field_names: into class and :indexes: into Mondodb
     """
     def __new__(cls, name, bases, dct):
         #  change structure:
@@ -303,17 +317,20 @@ class Model(AttrDict):
 
     inc_id = False
 
-    def __init__(self, doc=None, **kwargs):
-        doc and kwargs.update(doc)
+    def __init__(self, initial=None, **kwargs):
         self._lang = kwargs.pop('_lang', self._fallback_lang)
+        dct = kwargs.copy()
+        if initial and isinstance(initial, dict):
+            dct.update(**initial)
         for field in self._protected_field_names:
-            if field in kwargs:
+            if field in dct:
                 raise AttributeError("Forbidden attribute name %s for model %s" % (field, self.__class__.__name__ ))
-        return super(Model, self).__init__(**kwargs)
+        return super(Model, self).__init__(initial, **kwargs)
 
     def __setattr__(self, attr, value):
         if attr in self._protected_field_names:
             return dict.__setattr__(self, attr, value)
+
         if attr in self.i18n:
             if attr not in self:
                 value = {self._lang: value}
@@ -359,13 +376,19 @@ class Model(AttrDict):
 
     @classmethod
     def get_or_create(cls, *args, **kwargs):
+        spec = copy.deepcopy(args)
+        # TODO: spec = {'attr.name: 'Name'}
         instance = cls.query.find_one(*args, **kwargs)
-        return instance or kwargs.pop('_lang', True) and cls.create(*args, **kwargs)
+        if not instance:
+            if not spec or not isinstance(spec[0], dict):
+                raise InitDataError("first argument must be an instance of dict with init data")
+            instance = cls.create(spec[0], **kwargs)
+
+        return instance
 
     def __repr__(self):
         return "<%s:%s>" % (self.__class__.__name__,
                             super(Model, self).__repr__())
-                            # getattr(self, 'id', self._id))
 
     def __unicode__(self):
         return str(self).decode('utf-8')

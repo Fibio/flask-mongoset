@@ -48,6 +48,8 @@ class BaseModelTest(BaseTest):
         assert result.test == "hello world"
         assert isinstance(result, self.model)
 
+        assert not self.model.query.find_one({"test": "something else"})
+
     def test_find(self):
         self.insert({"test": "hello world"})
         self.insert({"test": "testing"})
@@ -57,6 +59,8 @@ class BaseModelTest(BaseTest):
         result = result[0]
         result.test = "testing"
         assert isinstance(result, self.model)
+
+        assert not self.model.query.find({"test": "not test"}).count()
 
     def test_save_return_a_class(self):
         test = self.model({"test": "hello"})

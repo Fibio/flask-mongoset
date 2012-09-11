@@ -58,9 +58,9 @@ class TestValidation(BaseTest):
             assert True
 
     def test_translate(self):
-        result = self.model.get_or_create(**{'name': 'Name', 'quantity': 1,
+        result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
                                     'attrs':{'feature': 'ice', 'revision': 1},
-                                    'list_attrs':['one', 'two'], '_lang':'en'})
+                                    'list_attrs':['one', 'two']}, _lang='en')
         assert result.name == 'Name'
         result._lang = 'fr'
         result.update({'name': 'Nom'})
@@ -73,11 +73,12 @@ class TestValidation(BaseTest):
         result.update({'attrs': {'feature': 'glace', 'revision': 1}})
         result.update({'list_attrs': ['un', 'deux']})
 
-        result = self.model.query.find_one(**{'name': 'Nom', '_lang': 'fr'})
+        result = self.model.query.find_one({'name': 'Nom'}, _lang='fr')
         assert result.attrs.feature == 'glace'
         assert result.list_attrs == ['un', 'deux']
 
-        result = self.model.query.find(_lang='en', **{'attrs.feature': 'ice'})[0]
+        result = self.model.query.find({'attrs.feature': 'ice'})[0]
         assert result.attrs.feature == 'ice'
         assert result.name == 'Name'
         assert result.list_attrs == ['one', 'two']
+        assert not self.model.query.find({'attrs.feature': 'something else'}).count()
