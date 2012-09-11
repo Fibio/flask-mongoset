@@ -196,8 +196,7 @@ class BaseQuery(Collection):
 
     def find(self, *args, **kwargs):
         kwargs['as_class'] = self.document_class
-        if args and args[0]:
-            spec = args[0]
+        spec = args and args[0]
         if self.i18n:
             if not isinstance(spec, dict):
                 raise TypeError("first argument must be an instance of dict")
