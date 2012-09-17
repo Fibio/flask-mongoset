@@ -267,13 +267,15 @@ class ModelType(type):
                 if key.name in dct['i18n']:
                     dct['structure'].keys.remove(key)
                     dct['structure'].keys.append(t.Key(key.name,
-                                              trafaret=t.Mapping(t.String, key.trafaret)))
+                                              trafaret=t.Mapping(t.String, key.trafaret),
+                                              default=key.default, optional=key.optional,
+                                              to_name=key.to_name))
 
         # inheritance from abstract models:
         for model in bases:
             if getattr(model, '__abstract__', None) is True:
                 '__abstract__' not in dct and dct.__setitem__('__abstract__', False)
-                base_attrs = ['i18n', 'indexes']
+                base_attrs = ['i18n', 'indexes', 'required_fields']
                 for attr in base_attrs:
                     total = list(set(getattr(model, attr, []))|set(dct.get(attr, [])))
                     total and dct.update({attr: total})
@@ -281,6 +283,16 @@ class ModelType(type):
                     new_structure = list(set(model.structure.keys)|set(structure.keys))
                     dct['structure'].keys = new_structure
                 break
+
+        # add required_fields:
+        if dct.get('required_fields'):
+            required_fields = dct.get('required_fields')
+            if structure:
+                optional = filter(lambda key: key.name not in dct['required_fields'], structure.keys)
+                dct['structure'] = dct['structure'].make_optional(*optional)
+            else:
+                struct = {}
+                dct['structure'] = t.Dict(struct.fromkeys(required_fields, t.Any)).allow_extra('*')
         return type.__new__(cls, name, bases, dct)
 
     def __init__(cls, name, bases, dct):
@@ -336,6 +348,8 @@ class Model(AttrDict):
         :param structure: optional, a structure of mongo document,
                             will be validate by trafaret https://github.com/nimnull/trafaret
 
+        :param required_fields: optional, list of required fields
+
         :param use_autorefs: optional, if it is True - AutoReferenceObject will be use
                             for query, by default is True
 
@@ -358,11 +372,13 @@ class Model(AttrDict):
 
     db = None
 
-    indexes = None
+    indexes = []
 
     query_class = BaseQuery
 
     structure = t.Dict().allow_extra('*')
+
+    required_fields = []
 
     use_autorefs = True
 

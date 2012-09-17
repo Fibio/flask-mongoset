@@ -61,6 +61,14 @@ Access MongoDB from your Flask application.
         product._lang = 'fr'
         result.update({'title': 'Nom'})
 
+        # create:
+        Product.create({'name': 'Name', 'quantity': 1,
+                                    'attrs':{'feature': 'ice', 'revision': 1}}, _lang='en')
+
+        # create with default _lang
+        Product.create({'name': 'Name', 'quantity': 1,
+                                    'attrs':{'feature': 'ice', 'revision': 1}})
+
         # get_or_create:
         Product.query.get_or_create({'name': 'Name', 'quantity': 1,
                                     'attrs':{'feature': 'ice', 'revision': 1}}, _lang='en')
