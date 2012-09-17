@@ -9,10 +9,12 @@ Inspiration:
 https://github.com/slacy/minimongo/
 https://github.com/mitsuhiko/flask-sqlalchemy
 https://github.com/namlook/mongokit
+https://github.com/dqminh/flask-mongoobject
 
-:copyright: (c) 2011 by Daniel, Dao Quang Minh (dqminh).
+:copyright: (c) 2012 by Fibio, nimnull.
 :license: MIT, see LICENSE for more details.
 """
+
 from __future__ import absolute_import
 import copy
 import operator
@@ -27,8 +29,10 @@ from pymongo.son_manipulator import SONManipulator, AutoReference, NamespaceInje
 from flask import abort
 
 
+# list of collections for models witch need autoincrement id
 inc_collections = set([])
 
+# list of collections for models witch need auto dbref
 autoref_collections = {}
 
 
@@ -41,6 +45,9 @@ class InitDataError(Exception):
 
 
 class ClassProperty(property):
+    """ Implements :@classproperty: decorator, like @property but
+        for the class not for the instance of class
+    """
     def __init__(self, method, *args, **kwargs):
         method = classmethod(method)
         return super(ClassProperty, self).__init__(method, *args, **kwargs)
@@ -56,6 +63,10 @@ class AttrDict(dict):
     """
     Base object that represents a MongoDB document. The object will behave both
     like a dict `x['y']` and like an object `x.y`
+
+    :param initial: you can define new instance via dictionary:
+                    AttrDict({'a': 'one', 'b': 'two'}) or pass data
+                    in kwargs AttrDict(a='one', b='two')
     """
     def __init__(self, initial=None, **kwargs):
         initial and kwargs.update(**initial)
@@ -72,7 +83,8 @@ class AttrDict(dict):
         return self._change_method('__delitem__', attr)
 
     def _make_attr_dict(self, value):
-        # Supporting method for self.__setitem__
+        """ Supporting method for self.__setitem__
+        """
         if isinstance(value, list):
             value = map(self._make_attr_dict, value)
         elif isinstance(value, dict) and not isinstance(value, AttrDict):
@@ -80,6 +92,9 @@ class AttrDict(dict):
         return value
 
     def _change_method(self, method, *args, **kwargs):
+        """ Changes base dict methods to implemet dotnotation
+            and sets AttributeError instead KeyError
+        """
         try:
             callmethod = operator.methodcaller(method, *args, **kwargs)
             return callmethod(super(AttrDict, self))
@@ -142,7 +157,7 @@ class AutoReferenceObject(AutoReference):
                     return map(transform_value, value)
                 elif isinstance(value, dict):
                     if value.get('_ns', None):
-                        cls = autoref_collections.get(value['_ns'], None)
+                        cls = autoref_collections.get(value['_ns'])
                         if cls:
                             return cls(transform_dict(value))
                     return transform_dict(value)
@@ -159,11 +174,10 @@ class AutoReferenceObject(AutoReference):
 
 class MongoCursor(Cursor):
     """
-    A cursor that will return an instance of :attr:`as_class` with
-    provided lang
+    A cursor that will return an instance with
+    provided :param _lang:
     """
     def __init__(self, *args, **kwargs):
-        self.as_class = kwargs.get('as_class')
         self._lang = kwargs.pop('_lang')
         return super(MongoCursor, self).__init__(*args, **kwargs)
 
@@ -184,8 +198,13 @@ class MongoCursor(Cursor):
 class BaseQuery(Collection):
     """
     `BaseQuery` extends :class:`pymongo.Collection` that adds :_lang: parameter
-    to response instance via MongoCursor. If attr i18n not in model, so model doesn't need translation,
+    to response instance via MongoCursor.
+    If attr i18n not in model, so model doesn't need translation,
     pymongo.Collection will use
+
+    :param document_class: to return data from db as instance of this class
+
+    :param i18n: to change translatable attributes in the search query
     """
 
     def __init__(self, *args, **kwargs):
@@ -196,6 +215,8 @@ class BaseQuery(Collection):
     def find(self, *args, **kwargs):
         kwargs['as_class'] = self.document_class
         spec = args and args[0]
+
+        # defines the fields that should be translated
         if self.i18n and spec:
             if not isinstance(spec, dict):
                 raise TypeError("first argument must be an instance of dict")
@@ -208,6 +229,7 @@ class BaseQuery(Collection):
                     spec['.'.join(attrs)] = spec.pop(attr)
             self._make_attrs(spec)
             return MongoCursor(self, spec=spec, as_class=self.document_class, _lang=lang)
+
         return super(BaseQuery, self).find(*args, **kwargs)
 
     def get_or_404(self, id):
@@ -238,7 +260,7 @@ class ModelType(type):
         Adds :_protected_field_names: into class and :indexes: into Mondodb
     """
     def __new__(cls, name, bases, dct):
-        #  change structure:
+        #  change structure for translated fields:
         structure = dct.get('structure')
         if structure and dct.get('i18n'):
             for key in structure.keys[:]:
@@ -247,10 +269,10 @@ class ModelType(type):
                     dct['structure'].keys.append(t.Key(key.name,
                                               trafaret=t.Mapping(t.String, key.trafaret)))
 
-        # inheritance:
+        # inheritance from abstract models:
         for model in bases:
             if getattr(model, '__abstract__', None) is True:
-                dct.update({'__abstract__': False})
+                '__abstract__' not in dct and dct.__setitem__('__abstract__', False)
                 base_attrs = ['i18n', 'indexes']
                 for attr in base_attrs:
                     total = list(set(getattr(model, attr, []))|set(dct.get(attr, [])))
@@ -285,9 +307,40 @@ class ModelType(type):
 
 
 class Model(AttrDict):
-    """
-    Base class for custom user models. Provide convenience ActiveRecord
-    methods such as :attr:`save`, :attr:`remove`
+    """ Base class for custom user models. Provide convenience ActiveRecord
+        methods such as :attr:`save`, :attr:`create`, :attr:`update`, :attr:`delete`.
+
+        :param __collection__: name of mongo collection
+
+        :param __abstract__: if True - there is an abstract Model, so :param i18n:,
+                            :param structure: and :param indexes: shall be added for
+                            submodels
+
+        :param _protected_field_names: fields names that can be added like dict items,
+                            generate automatically by ModelType metaclass
+
+        :param _lang: optional, language for model, by default it is
+                            the same as :param _fallback_lang:
+
+        :param _fallback_lang: fallback model language, by default it is
+                            app.config.FALLBACK_LANG
+
+        :param i18n: optional, list of fields that need to translate
+
+        :param db: Mondodb, it is defining by MongoObject
+
+        :param indexes: optional, list of fields that need to index
+
+        :param query_class: class makes query to MongoDB, by default it is :BaseQuery:
+
+        :param structure: optional, a structure of mongo document,
+                            will be validate by trafaret https://github.com/nimnull/trafaret
+
+        :param use_autorefs: optional, if it is True - AutoReferenceObject will be use
+                            for query, by default is True
+
+        :param inc_id: optional, if it if True - AutoincrementId will be use for query,
+                            by default is False
     """
     __metaclass__ = ModelType
 
@@ -366,7 +419,8 @@ class Model(AttrDict):
         return self
 
     def update_with_reload(self, spec=None, **kwargs):
-        # hack to return self with autorefs after update
+        """ Returns self with autorefs after update
+        """
         self.update(spec, **kwargs)
         return self.query.find_one({'_id': self._id}, _lang=self._lang)
 
@@ -399,7 +453,35 @@ class Model(AttrDict):
 
 
 class MongoObject(object):
+    """ This class is used to control the MongoObject integration to Flask application.
+        Adds :param db: and :param _fallback_lang: into Model
 
+    Usage:
+
+        app = Flask(__name__)
+        mongo = MongoObject(app)
+
+    This class also provides access to mongo Model:
+
+        class Product(mongo.Model):
+            structure = t.Dict({
+            'title': t.String,
+            'quantity': t.Int,
+            'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
+        }).allow_extra('*')
+        indexes = ['id']
+
+    via register method:
+        mongo = MongoObject(app)
+        mongo.register(Product, OtherModel)
+
+    or via decorator:
+        from flaskext.mongoobject import Model
+
+        @mongo.register
+        class Product(Model):
+            pass
+    """
     def __init__(self, app=None):
         self.Model = Model
         if app is not None:
@@ -444,22 +526,6 @@ class MongoObject(object):
     def register(self, *models):
         """Register one or more :class:`mongoobject.Model` instances to the
         connection.
-
-        Can be also used as a decorator on Model:
-
-        .. code-block:: python
-
-            db = MongoObject(app)
-
-            @db.register
-            class Task(Model):
-                structure = {
-                   'title': unicode,
-                   'text': unicode,
-                   'creation': datetime,
-                }
-
-        :param documents: A :class:`list` of :class:`mongoobject.Model`.
         """
 
         for model in models:
@@ -471,6 +537,8 @@ class MongoObject(object):
 
     @property
     def session(self):
+        """ Returns MongoDB
+        """
         if not getattr(self, "db", None):
             self.db = self.connection[self.app.config['MONGODB_DATABASE']]
             if self.app.config['MONGODB_AUTOREF']:

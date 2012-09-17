@@ -13,13 +13,22 @@ class BaseModel(Model):
     }).allow_extra('*')
     indexes = ['id']
 
-class SubModel(BaseModel):
+class SubAbstractModel(BaseModel):
+    __abstract__ = True
     __collection__ = "subtests"
     inc_id = True
     structure = t.Dict({
         'list_attrs': t.List(t.String)
     }).allow_extra('*')
     indexes = [('quantity', DESCENDING), 'name']
+
+class SubModel(SubAbstractModel):
+    __collection__ = "subtests"
+    # inc_id = True
+    # structure = t.Dict({
+    #     'list_attrs': t.List(t.String)
+    # }).allow_extra('*')
+    # indexes = [('quantity', DESCENDING), 'name']
 
 
 class TestValidation(BaseTest):
