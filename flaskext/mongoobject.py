@@ -290,7 +290,7 @@ class ModelType(type):
                         structure.extras = list(set(model.structure.extras)|set(structure.extras))
 
                     if not structure.ignore_any:
-                        structure.ignore = list(set(model.structure.extras)|set(structure.extras))
+                        structure.ignore = list(set(model.structure.ignore)|set(structure.ignore))
                 elif model.structure:
                     dct['structure'] = model.structure
                 break

@@ -6,6 +6,7 @@ from flaskext.mongoobject import Model
 
 class BaseModel(Model):
     __abstract__ = True
+    inc_id = True
     structure = t.Dict({
         'name': t.String,
         'quantity': t.Int,
@@ -17,8 +18,6 @@ class BaseModel(Model):
 
 class SubAbstractModel(BaseModel):
     __abstract__ = True
-    __collection__ = "subtests"
-    inc_id = True
     structure = t.Dict({
         'list_attrs': t.List(t.String)
     }).allow_extra('wrong_attr')
@@ -84,4 +83,12 @@ class TestValidation(BaseTest):
                            'list_attrs': ['one', 'two']})
         assert not self.model.query.find_one({'wrong_attr': 1})
         assert self.model.query.find_one({'name': 'NewName'})
+
+    def test_has_id(self):
+        self.model.create({'name': 'Name', 'quantity': 1,
+                    'attrs': {'feature': 'ice', 'revision': 1},
+                    'list_attrs': ['one', 'two']})
+        result = self.model.query.find_one({'name': 'Name'})
+        assert result.id
+
 
