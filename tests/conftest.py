@@ -64,12 +64,6 @@ class BaseModelTest(BaseTest):
 
         assert not self.model.query.find({"test": "not test"}).count()
 
-    def test_save_return_a_class(self):
-        test = self.model({"test": "hello"})
-        test.save()
-        assert test.test == "hello"
-        assert isinstance(test, self.model)
-
     def test_create(self):
         result = self.model.create(name='Hello')
         assert result == self.model.query.find_one(name='Hello')
@@ -82,6 +76,11 @@ class BaseModelTest(BaseTest):
 
         result = self.model.get_or_create(test='test')
         assert result == self.model.query.find_one(test='test')
+
+    def test_save_return_a_class(self):
+        test = self.model.create({"test": "hello"})
+        assert test.test == "hello"
+        assert isinstance(test, self.model)
 
     def test_update(self):
         result = self.model.create(test="hellotest")
@@ -113,10 +112,8 @@ class BaseModelTest(BaseTest):
             assert True
 
     def test_handle_auto_dbref(self):
-        parent = self.model(test="hello")
-        parent.save()
-        child = self.model(test="test", parent=parent)
-        child.save()
+        parent = self.model.create(test="hello")
+        child = self.model.create(test="test", parent=parent)
 
         child = self.model.query.find_one({"test": "test"})
         assert child.parent.test == "hello"
@@ -130,10 +127,9 @@ class BaseModelTest(BaseTest):
         assert child.parent.test == "hello"
 
     def test_handle_auto_dbref_inside_a_list(self):
-        parent = self.model(test="hellotest")
-        parent.save()
-        child = self.model(test="testing", parents=[parent], parent=parent)
-        child.save()
+        parent = self.model.get_or_create({'test': 'hellotest'})
+        child = self.model.create(test="testing",
+                                         parents=[parent], parent=parent)
 
         child = self.model.query.find_one({"test": "testing"})
         assert child.parents[0].test == "hellotest"
@@ -141,9 +137,9 @@ class BaseModelTest(BaseTest):
         assert isinstance(child, self.model)
         assert isinstance(child.parents[0], self.model)
 
-        parent = self.model(test="test_two")
-        parent.save()
-        child = child.update_with_reload({'parents': [DBRef(parent.__collection__, parent._id)]})
+        parent = self.model.create(test="test_two")
+        child = child.update_with_reload({
+            'parents': [DBRef(parent.__collection__, parent._id)]})
         assert child.parents[0].test == "test_two"
 
     def test_404(self):

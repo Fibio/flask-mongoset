@@ -14,6 +14,7 @@ class BaseModel(Model):
     i18n = ['name', 'attrs']
     indexes = ['id']
 
+
 class i18nModel(BaseModel):
     __collection__ = "i18ntests"
     inc_id = True
@@ -21,7 +22,7 @@ class i18nModel(BaseModel):
         'list_attrs': t.List(t.String)
     }).allow_extra('*')
     i18n = ['list_attrs']
-    indexes = [('quantity', DESCENDING), 'name' ]
+    indexes = [('quantity', DESCENDING), 'name']
 
 
 class TestValidation(BaseTest):
@@ -41,26 +42,26 @@ class TestValidation(BaseTest):
 
         try:
             self.model.create({'name': 'Name', 'quantity': 1,
-                               'attrs':{'feature': {}, 'revision': 1},
-                               'list_attrs':[]})
+                               'attrs': {'feature': {}, 'revision': 1},
+                               'list_attrs': []})
             assert False
         except t.DataError:
             assert True
 
         result = self.model.create({'name': 'Name', 'quantity': 1,
-                                    'attrs':{'feature': 'ice', 'revision': 1},
-                                    'list_attrs':['one', 'two']})
+                                    'attrs': {'feature': 'ice', 'revision': 1},
+                                    'list_attrs': ['one', 'two']})
 
         try:
-            result.update(attrs={'featre':[1, 2, 3]})
+            result.update(attrs={'featre': [1, 2, 3]})
             assert False
         except t.DataError:
             assert True
 
     def test_translate(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
-                                    'attrs':{'feature': 'ice', 'revision': 1},
-                                    'list_attrs':['one', 'two']}, _lang='en')
+                                    'attrs': {'feature': 'ice', 'revision': 1},
+                                    'list_attrs': ['one', 'two']}, _lang='en')
         assert result.name == 'Name'
         result._lang = 'fr'
         result.update({'name': 'Nom'})

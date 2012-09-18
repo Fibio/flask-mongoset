@@ -10,9 +10,10 @@ class BaseModel(Model):
         'name': t.String,
         'quantity': t.Int,
         'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
-    }).allow_extra('*')
+    }).allow_extra('_id', '_ns', 'id').ignore_extra('wrong_attr')
     indexes = ['id']
     required_fields = ['name', 'quantity']
+
 
 class SubAbstractModel(BaseModel):
     __abstract__ = True
@@ -20,7 +21,7 @@ class SubAbstractModel(BaseModel):
     inc_id = True
     structure = t.Dict({
         'list_attrs': t.List(t.String)
-    }).allow_extra('*')
+    }).allow_extra('wrong_attr')
     indexes = [('quantity', DESCENDING), 'name']
     required_fields = ['list_attrs']
 
@@ -44,12 +45,11 @@ class TestValidation(BaseTest):
 
     def test_inheritance(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
-                                    'attrs':{'feature': 'ice', 'revision': 1},
-                                    'list_attrs':['one', 'two']})
+                                'attrs': {'feature': 'ice', 'revision': 1},
+                                'list_attrs': ['one', 'two']})
         assert result.name == 'Name'
         assert result.attrs.feature == 'ice'
         assert result.list_attrs == ['one', 'two']
-
         result.update({'attrs': {'feature': 'glace', 'revision': 1}})
         assert result.attrs.feature == 'glace'
 
@@ -59,12 +59,13 @@ class TestValidation(BaseTest):
 
     def test_required_fields_with_structure(self):
         try:
-            self.model.create({'quantity': '1', 'attrs':{'feature': 'ice', 'revision': 1}})
+            self.model.create({'quantity': '1',
+                               'attrs': {'feature': 'ice', 'revision': 1}})
             assert False
         except t.DataError:
             assert True
-
-        assert self.model.create({'name': 'Name', 'quantity': 1, 'list_attrs':['one', 'two']})
+        assert self.model.create({'name': 'Name',
+                                  'quantity': 1, 'list_attrs': ['one', 'two']})
 
     def test_required_fields_without_structure(self):
         self.db.register(SimpleModel)
@@ -74,4 +75,13 @@ class TestValidation(BaseTest):
         except t.DataError:
             assert True
 
-        assert SimpleModel.create({'name': 'Name', 'quantity': 1, 'list_attrs':['one', 'two']})
+        assert SimpleModel.create({'name': 'Name', 'quantity': 1,
+                                   'list_attrs': ['one', 'two']})
+
+    def test_structure_inheritance(self):
+        self.model.create({'name': 'NewName', 'quantity': 1, 'wrong_attr': 1,
+                           'attrs': {'feature': 'ice', 'revision': 1},
+                           'list_attrs': ['one', 'two']})
+        assert not self.model.query.find_one({'wrong_attr': 1})
+        assert self.model.query.find_one({'name': 'NewName'})
+

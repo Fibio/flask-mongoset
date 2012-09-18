@@ -18,6 +18,7 @@ class TestModelDecorator(BaseModelTest):
 
     def setUp(self):
         super(TestModelDecorator, self).setUp()
+
         @self.db.register
         class NewModel(Model):
             __collection__ = 'decotests'
@@ -28,5 +29,3 @@ class TestModelDecorator(BaseModelTest):
     def test_autoincrement(self):
         result = self.model.create(name='Hello')
         assert result.id == 1
-
-

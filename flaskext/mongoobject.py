@@ -24,7 +24,8 @@ from pymongo import Connection, ASCENDING
 from pymongo.cursor import Cursor
 from pymongo.database import Database
 from pymongo.collection import Collection
-from pymongo.son_manipulator import SONManipulator, AutoReference, NamespaceInjector
+from pymongo.son_manipulator import (SONManipulator, AutoReference,
+                                     NamespaceInjector)
 
 from flask import abort
 
@@ -119,8 +120,8 @@ class AutoincrementId(SONManipulator):
     def _get_next_id(self, collection):
         database = collection.database
         result = database._autoincrement_ids.find_and_modify(
-            query={"id": collection.name,},
-            update={"$inc": {"next": 1},},
+            query={"id": collection.name},
+            update={"$inc": {"next": 1}},
             upsert=True,
             new=True)
         return result["next"]
@@ -133,9 +134,6 @@ class AutoReferenceObject(AutoReference):
     This manipulator should probably only be used when the NamespaceInjector is
     also being used, otherwise it doesn't make too much sense - documents can
     only be auto-referenced if they have an `_ns` field.
-
-    If the document should be an instance of a :class:`flaskext.mongoobject.Model`
-    then we will transform it into a model's instance too.
 
     NOTE: this will behave poorly if you have a circular reference.
 
@@ -228,7 +226,8 @@ class BaseQuery(Collection):
                     attrs.insert(1, lang)
                     spec['.'.join(attrs)] = spec.pop(attr)
             self._make_attrs(spec)
-            return MongoCursor(self, spec=spec, as_class=self.document_class, _lang=lang)
+            return MongoCursor(self, spec=spec, as_class=self.document_class,
+                               _lang=lang)
 
         return super(BaseQuery, self).find(*args, **kwargs)
 
@@ -256,7 +255,8 @@ class BaseQuery(Collection):
 
 class ModelType(type):
     """ Changes validation rules for transleted attrs.
-        Implements inheritance for attrs :i18n:, :indexes: and :structure: from __abstract__ model
+        Implements inheritance for attrs :i18n:, :indexes:
+        and :structure: from __abstract__ model
         Adds :_protected_field_names: into class and :indexes: into Mondodb
     """
     def __new__(cls, name, bases, dct):
@@ -267,9 +267,9 @@ class ModelType(type):
                 if key.name in dct['i18n']:
                     dct['structure'].keys.remove(key)
                     dct['structure'].keys.append(t.Key(key.name,
-                                              trafaret=t.Mapping(t.String, key.trafaret),
-                                              default=key.default, optional=key.optional,
-                                              to_name=key.to_name))
+                                    trafaret=t.Mapping(t.String, key.trafaret),
+                                    default=key.default, optional=key.optional,
+                                    to_name=key.to_name))
 
         # inheritance from abstract models:
         for model in bases:
@@ -280,19 +280,33 @@ class ModelType(type):
                     total = list(set(getattr(model, attr, []))|set(dct.get(attr, [])))
                     total and dct.update({attr: total})
                 if model.structure and structure is not None:
-                    new_structure = list(set(model.structure.keys)|set(structure.keys))
-                    dct['structure'].keys = new_structure
+                    new_keys = list(set(model.structure.keys)|set(structure.keys))
+                    structure.keys = new_keys
+                    structure.allow_any = structure.allow_any \
+                                                 or model.structure.allow_any
+                    structure.ignore_any = structure.ignore_any \
+                                                 or model.structure.ignore_any
+                    if not structure.allow_any:
+                        structure.extras = list(set(model.structure.extras)|set(structure.extras))
+
+                    if not structure.ignore_any:
+                        structure.ignore = list(set(model.structure.extras)|set(structure.extras))
+                elif model.structure:
+                    dct['structure'] = model.structure
                 break
 
         # add required_fields:
         if dct.get('required_fields'):
             required_fields = dct.get('required_fields')
-            if structure:
-                optional = filter(lambda key: key.name not in dct['required_fields'], structure.keys)
+            if dct.get('structure'):
+                optional = filter(lambda key: key.name not in dct['required_fields'],
+                                  dct.get('structure').keys)
+                optional = map(operator.attrgetter('name'), optional)
                 dct['structure'] = dct['structure'].make_optional(*optional)
             else:
                 struct = {}
                 dct['structure'] = t.Dict(struct.fromkeys(required_fields, t.Any)).allow_extra('*')
+
         return type.__new__(cls, name, bases, dct)
 
     def __init__(cls, name, bases, dct):
@@ -320,22 +334,23 @@ class ModelType(type):
 
 class Model(AttrDict):
     """ Base class for custom user models. Provide convenience ActiveRecord
-        methods such as :attr:`save`, :attr:`create`, :attr:`update`, :attr:`delete`.
+        methods such as :attr:`save`, :attr:`create`, :attr:`update`,
+        :attr:`delete`.
 
         :param __collection__: name of mongo collection
 
-        :param __abstract__: if True - there is an abstract Model, so :param i18n:,
-                            :param structure: and :param indexes: shall be added for
-                            submodels
+        :param __abstract__: if True - there is an abstract Model,
+                    so :param i18n:, :param structure: and
+                    :param indexes: shall be added for submodels
 
-        :param _protected_field_names: fields names that can be added like dict items,
-                            generate automatically by ModelType metaclass
+        :param _protected_field_names: fields names that can be added like
+                    dict items, generate automatically by ModelType metaclass
 
         :param _lang: optional, language for model, by default it is
-                            the same as :param _fallback_lang:
+                    the same as :param _fallback_lang:
 
         :param _fallback_lang: fallback model language, by default it is
-                            app.config.FALLBACK_LANG
+                    app.config.FALLBACK_LANG
 
         :param i18n: optional, list of fields that need to translate
 
@@ -343,18 +358,19 @@ class Model(AttrDict):
 
         :param indexes: optional, list of fields that need to index
 
-        :param query_class: class makes query to MongoDB, by default it is :BaseQuery:
+        :param query_class: class makes query to MongoDB,
+                    by default it is :BaseQuery:
 
-        :param structure: optional, a structure of mongo document,
-                            will be validate by trafaret https://github.com/nimnull/trafaret
+        :param structure: optional, a structure of mongo document, will be
+                    validate by trafaret https://github.com/nimnull/trafaret
 
         :param required_fields: optional, list of required fields
 
-        :param use_autorefs: optional, if it is True - AutoReferenceObject will be use
-                            for query, by default is True
+        :param use_autorefs: optional, if it is True - AutoReferenceObject
+                    will be use for query, by default is True
 
-        :param inc_id: optional, if it if True - AutoincrementId will be use for query,
-                            by default is False
+        :param inc_id: optional, if it if True - AutoincrementId
+                    will be use for query, by default is False
     """
     __metaclass__ = ModelType
 
@@ -392,6 +408,7 @@ class Model(AttrDict):
         for field in self._protected_field_names:
             if field in dct:
                 raise AttributeError("Forbidden attribute name %s for model %s" % (field, self.__class__.__name__ ))
+
         return super(Model, self).__init__(initial, **kwargs)
 
     def __setattr__(self, attr, value):
@@ -405,12 +422,14 @@ class Model(AttrDict):
                 attrs = self[attr].copy()
                 attrs.update({self._lang: value})
                 value = attrs
+
         return super(Model, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
         value = super(Model, self).__getattr__(attr)
         if attr in self.i18n:
-            value = value.get(self._lang, value.get(self._fallback_lang, value))
+            value = value.get(self._lang,
+                              value.get(self._fallback_lang, value))
         return value
 
     @classproperty
@@ -419,19 +438,25 @@ class Model(AttrDict):
                                document_class=cls)
 
     def save(self, *args, **kwargs):
-        self.structure.check(self)
-        self.query.save(self, *args, **kwargs)
-        return self
+        data = self.structure.check(self)
+        return self.query.save(data, *args, **kwargs)
+
+    def save_with_reload(self, *args, **kwargs):
+        """ to get instance after save
+        """
+        _id = self.save(*args, **kwargs)
+        return self.query.find_one({'_id': _id}, _lang=self._lang)
 
     def update(self, spec=None, **kwargs):
-        update_options = set(['upsert', 'manipulate', 'safe', 'multi', '_check_keys'])
+        update_options = set(['upsert', 'manipulate', 'safe',
+                              'multi', '_check_keys'])
         spec = spec or {}
         new_attrs = list(kwargs.viewkeys() - update_options)
         for k in new_attrs:
             spec[k] = kwargs.pop(k)
         self._setattrs(**spec)
-        self.structure.check(self)
-        self.query.update({"_id": self._id}, self, **kwargs)
+        data = self.structure.check(self)
+        self.query.update({"_id": self._id}, data, **kwargs)
         return self
 
     def update_with_reload(self, spec=None, **kwargs):
@@ -446,7 +471,7 @@ class Model(AttrDict):
     @classmethod
     def create(cls, *args, **kwargs):
         instance = cls(*args, **kwargs)
-        return instance.save()
+        return instance.save_with_reload()
 
     @classmethod
     def get_or_create(cls, *args, **kwargs):
@@ -469,7 +494,8 @@ class Model(AttrDict):
 
 
 class MongoObject(object):
-    """ This class is used to control the MongoObject integration to Flask application.
+    """ This class is used to control the MongoObject integration
+        to Flask application.
         Adds :param db: and :param _fallback_lang: into Model
 
     Usage:
