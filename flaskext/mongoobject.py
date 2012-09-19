@@ -228,8 +228,11 @@ class BaseQuery(Collection):
 
         return MongoCursor(self, *args, **kwargs)
 
+    def get(self, id):
+        return self.find_one(_id=id) or self.find_one(id=id)
+
     def get_or_404(self, id):
-        return self.find_one(id=id) or abort(404)
+        return self.get(id) or abort(404)
 
     def find_one_or_404(self, *args, **kwargs):
         return self.find_one(*args, **kwargs) or abort(404)
