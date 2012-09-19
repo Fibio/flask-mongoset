@@ -76,7 +76,6 @@ class TestValidation(BaseTest):
 
         result = self.model.query.find_one({'name': 'Nom'}, _lang='fr')
         assert result.attrs.feature == 'glace'
-        assert result.list_attrs == ['un', 'deux']
 
         result = self.model.query.find({'attrs.feature': 'ice'})[0]
         assert result.attrs.feature == 'ice'

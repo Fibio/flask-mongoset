@@ -19,6 +19,7 @@ from __future__ import absolute_import
 import copy
 import operator
 import trafaret as t
+from bson.son import SON
 from bson.dbref import DBRef
 from pymongo import Connection, ASCENDING
 from pymongo.cursor import Cursor
@@ -154,7 +155,7 @@ class AutoReferenceObject(AutoReference):
                 elif isinstance(value, list):
                     return map(transform_value, value)
                 elif isinstance(value, dict):
-                    if value.get('_ns', None):
+                    if value.get('_ns'):
                         cls = autoref_collections.get(value['_ns'])
                         if cls:
                             return cls(transform_dict(value))
@@ -165,32 +166,30 @@ class AutoReferenceObject(AutoReference):
                 for (key, value) in object.items():
                     object[key] = transform_value(value)
                 return object
-
             son = transform_dict(son)
         return son
 
 
 class MongoCursor(Cursor):
     """
-    A cursor that will return an instance with
-    provided :param _lang:
+    A cursor that will return an instance of :param as_class: with
+    provided :param _lang: instead of dict
     """
     def __init__(self, *args, **kwargs):
         self._lang = kwargs.pop('_lang')
+        self.as_class = kwargs.pop('as_class')
         return super(MongoCursor, self).__init__(*args, **kwargs)
 
     def next(self):
         data = super(MongoCursor, self).next()
-        data._lang = self._lang
-        return data
+        return self.as_class(data, _lang=self._lang)
 
     def __getitem__(self, index):
         item = super(MongoCursor, self).__getitem__(index)
         if isinstance(index, slice):
             return item
         else:
-            item._lang = self._lang
-            return item
+            return self.as_class(item, _lang=self._lang)
 
 
 class BaseQuery(Collection):
@@ -211,25 +210,23 @@ class BaseQuery(Collection):
         super(BaseQuery, self).__init__(*args, **kwargs)
 
     def find(self, *args, **kwargs):
-        kwargs['as_class'] = self.document_class
         spec = args and args[0]
-
+        kwargs['as_class'] = self.document_class
+        kwargs['_lang'] = lang = kwargs.pop('_lang',
+                                            self.document_class._fallback_lang)
         # defines the fields that should be translated
         if self.i18n and spec:
             if not isinstance(spec, dict):
-                raise TypeError("first argument must be an instance of dict")
+                raise TypeError("The first argument must be an instance of dict")
 
-            lang = kwargs.pop('_lang', self.document_class._fallback_lang)
             for attr in spec.copy():
                 attrs = attr.split('.')
                 if attrs[0] in self.i18n:
                     attrs.insert(1, lang)
                     spec['.'.join(attrs)] = spec.pop(attr)
             self._make_attrs(spec)
-            return MongoCursor(self, spec=spec, as_class=self.document_class,
-                               _lang=lang)
 
-        return super(BaseQuery, self).find(*args, **kwargs)
+        return MongoCursor(self, *args, **kwargs)
 
     def get_or_404(self, id):
         return self.find_one(id=id) or abort(404)
@@ -403,12 +400,13 @@ class Model(AttrDict):
     def __init__(self, initial=None, **kwargs):
         self._lang = kwargs.pop('_lang', self._fallback_lang)
         dct = kwargs.copy()
+
         if initial and isinstance(initial, dict):
             dct.update(**initial)
+
         for field in self._protected_field_names:
             if field in dct:
                 raise AttributeError("Forbidden attribute name %s for model %s" % (field, self.__class__.__name__ ))
-
         return super(Model, self).__init__(initial, **kwargs)
 
     def __setattr__(self, attr, value):
@@ -417,12 +415,12 @@ class Model(AttrDict):
 
         if attr in self.i18n:
             if attr not in self:
-                value = {self._lang: value}
+                if not isinstance(value, dict) or self._lang not in value:
+                    value = {self._lang: value}
             else:
                 attrs = self[attr].copy()
                 attrs.update({self._lang: value})
                 value = attrs
-
         return super(Model, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
@@ -442,7 +440,7 @@ class Model(AttrDict):
         return self.query.save(data, *args, **kwargs)
 
     def save_with_reload(self, *args, **kwargs):
-        """ to get instance after save
+        """ returns self with autorefs after save
         """
         _id = self.save(*args, **kwargs)
         return self.query.find_one({'_id': _id}, _lang=self._lang)
@@ -460,7 +458,7 @@ class Model(AttrDict):
         return self
 
     def update_with_reload(self, spec=None, **kwargs):
-        """ Returns self with autorefs after update
+        """ returns self with autorefs after update
         """
         self.update(spec, **kwargs)
         return self.query.find_one({'_id': self._id}, _lang=self._lang)
