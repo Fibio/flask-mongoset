@@ -229,7 +229,7 @@ class BaseQuery(Collection):
         return MongoCursor(self, *args, **kwargs)
 
     def get(self, id):
-        return self.find_one(_id=id) or self.find_one(id=id)
+        return self.find_one({'_id': id}) or self.find_one({'id': id})
 
     def get_or_404(self, id):
         return self.get(id) or abort(404)
@@ -401,7 +401,8 @@ class Model(AttrDict):
     inc_id = False
 
     def __init__(self, initial=None, **kwargs):
-        self._lang = kwargs.pop('_lang', self._fallback_lang)
+        if not self._lang:
+            self._lang = kwargs.pop('_lang', self._fallback_lang)
         dct = kwargs.copy()
 
         if initial and isinstance(initial, dict):
