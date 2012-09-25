@@ -573,7 +573,7 @@ class MongoObject(object):
         app.config.setdefault('MONGODB_HOST', "localhost")
         app.config.setdefault('MONGODB_PORT', 27017)
         app.config.setdefault('MONGODB_DATABASE', "")
-        app.config.setdefault('MONGODB_AUTOREF', True)
+        app.config.setdefault('MONGODB_AUTOREF', False)
         app.config.setdefault('AUTOINCREMENT', True)
         app.config.setdefault('FALLBACK_LANG', 'en')
         self.app = app
