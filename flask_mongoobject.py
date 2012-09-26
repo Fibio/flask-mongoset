@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-flaskext.mongoobject
+flask.ext.mongoset
 ~~~~~~~~~~~~~~~~~~~~
 
 Add basic MongoDB support to your Flask application.
@@ -19,7 +19,6 @@ from __future__ import absolute_import
 import copy
 import operator
 import trafaret as t
-from bson.son import SON
 from bson.dbref import DBRef
 from pymongo import Connection, ASCENDING
 from pymongo.cursor import Cursor

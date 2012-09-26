@@ -1,5 +1,5 @@
 """
-Flask-MongoObject
+Flask-MongoSet
 -----------------
 
 Access MongoDB from your Flask application
@@ -7,29 +7,27 @@ Access MongoDB from your Flask application
 Links
 `````
 
-* `documentation <http://packages.python.org/Flask-MongoObject>`_
+* `documentation <http://packages.python.org/Flask-MongoSet>`_
 * `development version
-  <http://github.com/dqminh/flask-mongoobject/zipball/master#egg=Flask-MongoObject-dev>`_
+  <https://github.com/Fibio/flask-mongoobject/zipball/master#egg=Flask-MongoSet-dev>`_
 
 """
 from setuptools import setup
 
 
 setup(
-    name='Flask-MongoObject',
+    name='Flask-MongoSet',
     version='0.1.1',
-    url='https://github.com/dqminh/flask-mongoobject',
+    url='https://github.com/Fibio/flask-mongoobject',
     license='MIT',
     author='Fibio',
     author_email='fibio.tany@gmail.com',
     description='Access MongoDB from your Flask application',
     long_description=__doc__,
-    # packages=['flaskext'],
-    # namespace_packages=['flaskext'],
     py_modules=[
         'flask_mongoobject'
     ],
-    # test_suite='nose.collector',
+    test_suite='nose.collector',
     zip_safe=False,
     platforms='any',
     install_requires=[
