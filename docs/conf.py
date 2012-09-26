@@ -98,6 +98,7 @@ html_theme = 'flask_small'
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    'index_logo': 'mset_logo.png',
     'github_fork': 'fibio/flask-mongoobject'
 }
 
@@ -215,7 +216,7 @@ latex_documents = [
 # (source start file, name, description, authors, manual section).
 man_pages = [
     ('index', 'flask-mongoset', u'Flask-MongoSet Documentation',
-     [u'Fibio'], 1)
+     [u'fibio'], 1)
 ]
 
 # Example configuration for intersphinx: refer to the Python standard library.
