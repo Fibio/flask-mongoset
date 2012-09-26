@@ -1,4 +1,4 @@
-from flaskext.mongoobject import Model
+from flask.ext.mongoset import Model
 from conftest import BaseModelTest, SomeModel, SomedbModel
 
 

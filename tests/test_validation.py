@@ -1,6 +1,6 @@
 import trafaret as t
 from conftest import BaseTest
-from flaskext.mongoobject import Model
+from flask.ext.mongoset import Model
 
 
 class ValidateModel(Model):

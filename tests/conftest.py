@@ -2,10 +2,10 @@ from operator import methodcaller, attrgetter
 import flask
 from bson.dbref import DBRef
 from werkzeug.exceptions import NotFound
-from flaskext.mongoobject import MongoObject, Model
+from flask.ext.mongoset import MongoSet, Model
 
 
-db = MongoObject()
+db = MongoSet()
 app = flask.Flask(__name__)
 TESTING = True
 

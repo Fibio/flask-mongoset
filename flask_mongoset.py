@@ -532,7 +532,7 @@ class Model(AttrDict):
         return str(self).decode('utf-8')
 
 
-class MongoObject(object):
+class MongoSet(object):
     """ This class is used to control the MongoObject integration
         to Flask application.
         Adds :param db: and :param _fallback_lang: into Model
