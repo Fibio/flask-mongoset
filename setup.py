@@ -25,7 +25,7 @@ setup(
     description='Access MongoDB from your Flask application',
     long_description=__doc__,
     py_modules=[
-        'flask_mongoobject'
+        'flask_mongoset'
     ],
     test_suite='nose.collector',
     zip_safe=False,

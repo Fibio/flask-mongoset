@@ -30,6 +30,7 @@ used to declare your Model object::
 
 
     from flask import Flask
+    import trafaret as t
     from flask.ext.mongoset import MongoSet
 
     app = Flask(__name__)
@@ -124,7 +125,7 @@ some new methods:
 
 Also your model can be abstract:
 
-    class BaseModel(Model):
+    class BaseProduct(Model):
         __abstract__ = True
         structure = t.Dict({
             'name': t.String,
@@ -135,8 +136,8 @@ Also your model can be abstract:
         i18n = ['name', 'attrs']
         indexes = ['id']
 
-    class i18nModel(BaseModel):
-        __collection__ = "i18ntests"
+    class Product(BaseModel):
+        __collection__ = "products"
         inc_id = True
         structure = t.Dict({
             'list_attrs': t.List(t.String)
@@ -145,13 +146,13 @@ Also your model can be abstract:
         indexes = [('quantity', -1), 'name']
 
 
->>> i18nModel.i18n
+>>> Product.i18n
 Out: ['list_attrs', 'name', 'attrs']
 
->>> i18nModel.indexes
+>>> Product.indexes
 Out: [('quantity', -1), ('id', 1), ('name', 1)]
 
->>> i18nModel.required_fields
+>>> Product.required_fields
 Out: ['name']
 
 Model structure also inherits
