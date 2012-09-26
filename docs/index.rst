@@ -10,6 +10,15 @@ objects, internationalization, quering, id_autoincrementing, inheritance.
 The extensions is based on `Flask_MongoObject`_
 but added/removed a few features on its own.
 
+Installing Flask-Script
+-------------------------------
+
+Install with **pip** and **easy_install**::
+
+    pip install Flask-MongoSet
+
+If you are using **virtualenv**, it is assumed that you are installing **Flask-MongoSet**
+in the same virtualenv as your Flask application(s).
 
 Quickstart: A Sample Application
 --------------------------------

@@ -1,4 +1,0 @@
-<span id="flask-mongoset"></span><h1>Flask-MongoSet<a class="headerlink" href="#module-flask.ext.mongoset" title="Permalink to this headline">¶</a></h1>
-<p>Flask-MongoSet is an extension for <a class="reference external" href="http://flask.pocoo.org">Flask</a> that adds support for <a class="reference external" href="http://mongodb.org">MongoDB</a>
-
-* `documentation <http://packages.python.org/Flask-MongoSet>`_
