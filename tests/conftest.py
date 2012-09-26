@@ -111,7 +111,7 @@ class BaseModelTest(BaseTest):
         except AttributeError:
             assert True
 
-    def test_handle_auto_dbref(self):
+    def test_handle_auto_object(self):
         parent = self.model.create(test="hello")
         child = self.model.create(test="test", parent=parent)
 
@@ -121,12 +121,12 @@ class BaseModelTest(BaseTest):
         assert isinstance(child, self.model)
         assert isinstance(child.parent, self.model)
 
-    def test_handle_auto_dbref_after_create(self):
+    def test_handle_auto_object_after_create(self):
         parent = self.model.create(test="hello")
         child = self.model.create(test="test", parent=parent)
         assert child.parent.test == "hello"
 
-    def test_handle_auto_dbref_inside_a_list(self):
+    def test_handle_auto_object_inside_a_list(self):
         parent = self.model.get_or_create({'test': 'hellotest'})
         child = self.model.create(test="testing",
                                          parents=[parent], parent=parent)
