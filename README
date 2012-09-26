@@ -6,7 +6,7 @@ Access MongoDB from your Flask application.
     Usage:
 
         app = Flask(__name__)
-        mongo = MongoObject(app)
+        mongo = MongoSet(app)
 
     This class also provides access to mongo Model:
 

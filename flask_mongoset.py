@@ -638,4 +638,3 @@ class MongoSet(object):
     def clear(self):
         self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
         self.connection.end_request()
-
