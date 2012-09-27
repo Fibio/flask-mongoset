@@ -98,7 +98,7 @@ html_theme = 'flask_small'
 # documentation.
 html_theme_options = {
     'index_logo': 'mset_logo.png',
-    'github_fork': 'fibio/flask-mongoobject'
+    'github_fork': 'fibio/flask-mongoset'
 }
 
 # Add any paths that contain custom themes here, relative to this directory.

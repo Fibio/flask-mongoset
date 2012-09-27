@@ -9,7 +9,7 @@ Links
 
 * `documentation <http://packages.python.org/Flask-MongoSet>`_
 * `development version
-  <https://github.com/Fibio/flask-mongoobject/zipball/master#egg=Flask-MongoSet-dev>`_
+  <https://github.com/Fibio/flask-mongoset/zipball/master#egg=Flask-MongoSet-dev>`_
 
 """
 from setuptools import setup
@@ -18,7 +18,7 @@ from setuptools import setup
 setup(
     name='Flask-MongoSet',
     version='0.1.1',
-    url='https://github.com/Fibio/flask-mongoobject',
+    url='https://github.com/Fibio/flask-mongoset',
     license='MIT',
     author='fibio',
     author_email='fibio.tany@gmail.com',

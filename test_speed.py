@@ -1,8 +1,8 @@
 import cProfile
 import flask
-from flaskext.mongoobject import MongoObject
+from flask_mongoset import MongoSet
 
-db = MongoObject()
+db = MongoSet()
 app = flask.Flask(__name__)
 TESTING = True
 
