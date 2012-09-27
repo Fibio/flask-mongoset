@@ -9,7 +9,7 @@ Links
 
 * `documentation <http://packages.python.org/Flask-MongoObject>`_
 * `development version
-  <http://github.com/dqminh/flask-mongoobject/zipball/master#egg=Flask-MongoObject-dev>`_
+  <https://github.com/MediaSapiens/flask-mongoobject/zipball/master#egg=Flask-MongoObject-dev>`_
 
 """
 from setuptools import setup
@@ -18,14 +18,13 @@ from setuptools import setup
 setup(
     name='Flask-MongoObject',
     version='0.1',
-    url='https://github.com/dqminh/flask-mongoobject',
+    url='https://github.com/MediaSapiens/flask-mongoobject',
     license='MIT',
-    author='dqminh',
-    author_email='dqminh89@gmail.com',
+    author='Yehor Nazarkin',
+    author_email='nimnull@gmail.com',
     description='Access MongoDB from your Flask application',
     long_description=__doc__,
-    packages=['flaskext'],
-    namespace_packages=['flaskext'],
+    packages=['flask_mongoobject'],
     zip_safe=False,
     platforms='any',
     install_requires=[
@@ -33,6 +32,7 @@ setup(
         'Flask',
         'pymongo',
         'trafaret',
+        'py.test'
     ],
     test_suite='mongoobject_test.flask_mongoobject',
     classifiers=[

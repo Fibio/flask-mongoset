@@ -40,7 +40,8 @@ class BaseModelTest(BaseTest):
 
     def insert(self, dct):
         insert = methodcaller("insert", dct)
-        collection = attrgetter('db.session.{}'.format(self.model.__collection__))
+        collection = attrgetter('db.session.{}'.format(
+                                self.model.__collection__))
         return insert(collection(self))
 
     def test_find_one(self):
