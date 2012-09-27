@@ -19,8 +19,12 @@ from __future__ import absolute_import
 import copy
 import operator
 import trafaret as t
-from bson.son import SON
+
+# from bson.son import SON
 from bson.dbref import DBRef
+
+from flask import abort
+
 from pymongo import Connection, ASCENDING
 from pymongo.cursor import Cursor
 from pymongo.database import Database
@@ -28,8 +32,7 @@ from pymongo.collection import Collection
 from pymongo.son_manipulator import (SONManipulator, AutoReference,
                                      NamespaceInjector)
 
-from flask import abort
-
+from threading import Lock
 
 # list of collections for models witch need autoincrement id
 inc_collections = set([])
@@ -38,7 +41,7 @@ inc_collections = set([])
 autoref_collections = {}
 
 
-class AuthenticationIncorrect(Exception):
+class AuthenticationError(Exception):
     pass
 
 
@@ -71,7 +74,8 @@ class AttrDict(dict):
                     in kwargs AttrDict(a='one', b='two')
     """
     def __init__(self, initial=None, **kwargs):
-        initial and kwargs.update(**initial)
+        if initial is not None:
+            kwargs.update(**initial)
         return self._setattrs(**kwargs)
 
     def __getattr__(self, attr):
@@ -94,14 +98,14 @@ class AttrDict(dict):
         return value
 
     def _change_method(self, method, *args, **kwargs):
-        """ Changes base dict methods to implemet dotnotation
+        """ Changes base dict methods to implemet dot notation
             and sets AttributeError instead KeyError
         """
         try:
             callmethod = operator.methodcaller(method, *args, **kwargs)
             return callmethod(super(AttrDict, self))
-        except KeyError as excn:
-            raise AttributeError(excn)
+        except KeyError as ex:
+            raise AttributeError(ex)
 
     def _setattrs(self, **kwargs):
         for key, value in kwargs.iteritems():
@@ -217,7 +221,8 @@ class BaseQuery(Collection):
         # defines the fields that should be translated
         if self.i18n and spec:
             if not isinstance(spec, dict):
-                raise TypeError("The first argument must be an instance of dict")
+                raise TypeError("The first argument must be an instance of "
+                                "dict")
 
             for attr in spec.copy():
                 attrs = attr.split('.')
@@ -273,7 +278,8 @@ class ModelType(type):
 
         # inheritance from abstract models:
         for model in bases:
-            if getattr(model, '__abstract__', None) is True:
+
+            if hasattr(model, '__abstract__'):
                 '__abstract__' not in dct and dct.__setitem__('__abstract__', False)
                 base_attrs = ['i18n', 'indexes', 'required_fields']
                 for attr in base_attrs:
@@ -315,7 +321,7 @@ class ModelType(type):
         names = [model.__dict__.keys() for model in cls.__mro__]
         cls._protected_field_names = list(protected_field_names.union(*names))
 
-        if not getattr(cls, '__abstract__', False):
+        if not hasattr(cls, '__abstract__'):
             # add model into DBrefs register:
             cls.use_autorefs and autoref_collections.__setitem__(cls.__collection__, cls)
 
@@ -482,7 +488,8 @@ class Model(AttrDict):
         instance = cls.query.find_one(*args, **kwargs)
         if not instance:
             if not spec or not isinstance(spec[0], dict):
-                raise InitDataError("first argument must be an instance of dict with init data")
+                raise InitDataError("first argument must be an instance of "
+                                    "dict with init data")
             instance = cls.create(spec[0], **kwargs)
 
         return instance
@@ -493,6 +500,23 @@ class Model(AttrDict):
 
     def __unicode__(self):
         return str(self).decode('utf-8')
+
+
+def get_state(app):
+    """Gets the state for the application"""
+    assert 'mongoobject' in app.extensions, \
+        'The mongoobject extension was not registered to the current ' \
+        'application.  Please make sure to call init_app() first.'
+    return app.extensions['mongoobject']
+
+
+class _MongoObjectState(object):
+
+    def __init__(self, mongoobject, app):
+        self.mongoobject = mongoobject
+        self.app = app
+        self.connection = None
+        self.session = None
 
 
 class MongoObject(object):
@@ -528,73 +552,93 @@ class MongoObject(object):
     """
     def __init__(self, app=None):
         self.Model = Model
+        self._engine_lock = Lock()
+
         if app is not None:
+            self.app = app
             self.init_app(app)
+        else:
+            self.app = None
 
     def init_app(self, app):
         app.config.setdefault('MONGODB_HOST', "localhost")
         app.config.setdefault('MONGODB_PORT', 27017)
+        app.config.setdefault('MONGODB_USERNAME', '')
+        app.config.setdefault('MONGODB_PASSWORD', '')
         app.config.setdefault('MONGODB_DATABASE', "")
         app.config.setdefault('MONGODB_AUTOREF', True)
-        app.config.setdefault('AUTOINCREMENT', True)
-        app.config.setdefault('FALLBACK_LANG', 'en')
-        self.app = app
-        self.connect()
-        self.app.after_request(self.close_connection)
-        self.Model.db = self.session
-        self.Model._fallback_lang = app.config.get('FALLBACK_LANG')
+        app.config.setdefault('MONGODB_AUTOINCREMENT', False)
+        app.config.setdefault('MONGODB_FALLBACK_LANG', 'en')
+        app.config.setdefault('MONGODB_SLAVE_OKAY', False)
 
-    def connect(self):
+        if not hasattr(app, 'extensions'):
+            app.extensions = {}
+        app.extensions['mongoobject'] = _MongoObjectState(self, app)
+
+        @app.teardown_appcontext
+        def close_connection(response):
+            self.connection.end_request()
+            return response
+
+        self.session = self.get_session()
+        self.Model.db = self.session
+        self.Model._fallback_lang = app.config.get('MONGODB_FALLBACK_LANG')
+
+    def get_session(self, app):
+        """Returns a specific session with connection.
+
+        .. versionadded:: 0.12
+        """
+        with self._engine_lock:
+            state = get_state(app)
+            if state.connection is None:
+                state.connection = self.connect(app)
+                state.session = self._make_session(app)
+            return state.session
+
+    def _make_session(self, app):
+        state = get_state(app)
+        session = state.connection[app.config['MONGODB_DATABASE']]
+
+        if app.config['MONGODB_USERNAME'] is not '':
+            username = app.config['MONGODB_USERNAME']
+            password = app.config['MONGODB_PASSWORD']
+
+            if not session.authenticate(username, password):
+                raise AuthenticationError("Can't connect to database, "
+                                          "wrong user_name or password")
+
+        if app.config['MONGODB_AUTOREF']:
+            session.add_son_manipulator(NamespaceInjector())
+            session.add_son_manipulator(AutoReferenceObject(self))
+        if app.config['MONGODB_AUTOINCREMENT']:
+            session.add_son_manipulator(AutoincrementId())
+        return session
+
+    def connect(self, app):
         """Connect to the MongoDB server and register the documents from
         :attr:`registered_documents`. If you set ``MONGODB_USERNAME`` and
         ``MONGODB_PASSWORD`` then you will be authenticated at the
         ``MONGODB_DATABASE``.
         """
-        if not getattr(self, 'app', None):
-            raise RuntimeError('The mongoobject extension was not init to '
-                               'the current application.  Please make sure '
-                               'to call init_app() first.')
-        if not getattr(self, 'connection', None):
-            self.connection = Connection(
-                host=self.app.config.get('MONGODB_HOST'),
-                port=self.app.config.get('MONGODB_PORT'),
-                slave_okay=self.app.config.get('MONGODB_SLAVE_OKAY', False))
-
-        if self.app.config.get('MONGODB_USERNAME') is not None:
-            auth_success = self.session.authenticate(
-                self.app.config.get('MONGODB_USERNAME'),
-                self.app.config.get('MONGODB_PASSWORD'))
-            if not auth_success:
-                raise AuthenticationIncorrect("can't connect to data base, wrong user_name or password")
+        return Connection(host=app.config['MONGODB_HOST'],
+                                port=app.config['MONGODB_PORT'],
+                                slave_okay=app.config['MONGODB_SLAVE_OKAY'])
 
     def register(self, *models):
         """Register one or more :class:`mongoobject.Model` instances to the
         connection.
         """
-
         for model in models:
-            if not getattr(model, 'db', None) or not isinstance(model.db, Database):
+            if not hasattr(model, 'db') or not isinstance(model.db, Database):
                 setattr(model, 'db', self.session)
-            setattr(model, '_fallback_lang', self.app.config.get('FALLBACK_LANG'))
-            model.indexes and model.query.ensure_index(model.indexes)
+            if model.indexes:
+                model.query.ensure_index(model.indexes)
+
+            setattr(model, '_fallback_lang',
+                    self.app.config['MONGODB_FALLBACK_LANG'])
+
         return len(models) == 1 and models[0] or models
-
-    @property
-    def session(self):
-        """ Returns MongoDB
-        """
-        if not getattr(self, "db", None):
-            self.db = self.connection[self.app.config['MONGODB_DATABASE']]
-            if self.app.config['MONGODB_AUTOREF']:
-                self.db.add_son_manipulator(NamespaceInjector())
-                self.db.add_son_manipulator(AutoReferenceObject(self))
-            if self.app.config['AUTOINCREMENT']:
-                self.db.add_son_manipulator(AutoincrementId())
-        return self.db
-
-    def close_connection(self, response):
-        self.connection.end_request()
-        return response
 
     def clear(self):
         self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
