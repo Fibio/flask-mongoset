@@ -24,7 +24,7 @@ setup(
     author_email='nimnull@gmail.com, fibio.tany@gmail.com',
     description='Access MongoDB from your Flask application',
     long_description=__doc__,
-    py_modules=['flask_sqlalchemy'],
+    py_modules=['flask_mongoobject'],
     zip_safe=False,
     platforms='any',
     install_requires=[
@@ -32,7 +32,7 @@ setup(
         'Flask',
         'pymongo',
         'trafaret',
-        'py.test'
+        'pytest'
     ],
     test_suite='mongoobject_test.flask_mongoobject',
     classifiers=[
