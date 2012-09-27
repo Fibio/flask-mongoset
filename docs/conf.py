@@ -18,7 +18,6 @@ import sys, os
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath('_themes'))
-
 # -- General configuration -----------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
@@ -223,3 +222,17 @@ man_pages = [
 intersphinx_mapping = {'http://docs.python.org/': None,
                        'http://flask.pocoo.org/docs/': None,
                        'http://api.mongodb.org/python/current/': None}
+
+try:
+    __import__('flask_theme_support')
+except ImportError, e:
+    print '-' * 74
+    print 'Warning: Flask themes unavailable.  Building with default theme'
+    print 'If you want the Flask themes, run this command and build again:'
+    print
+    print '  git submodule update --init'
+    print '-' * 74
+
+    pygments_style = 'tango'
+    html_theme = 'default'
+    html_theme_options = {}
