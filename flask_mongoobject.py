@@ -174,6 +174,36 @@ class AutoReferenceObject(AutoReference):
         return son
 
 
+class SavedObject(SONManipulator):
+    """
+    Takes document from db as class instance.
+
+    This manipulator should probably only be used when the NamespaceInjector is
+    also being used, otherwise it doesn't make too much sense - nested
+    documents can only be taken from db as instace if they have an `_ns` field.
+    """
+
+    def transform_outgoing(self, son, collection):
+        if collection.name in autoref_collections:
+            def transform_value(value):
+                if isinstance(value, list):
+                    return map(transform_value, value)
+                elif isinstance(value, dict):
+                    if value.get('_ns'):
+                        cls = autoref_collections.get(value['_ns'])
+                        if cls:
+                            return cls(transform_dict(value))
+                    return transform_dict(value)
+                return value
+
+            def transform_dict(object):
+                for (key, value) in object.items():
+                    object[key] = transform_value(value)
+                return object
+            son = transform_dict(son)
+        return son
+
+
 class MongoCursor(Cursor):
     """
     A cursor that will return an instance of :param as_class: with
@@ -186,14 +216,14 @@ class MongoCursor(Cursor):
 
     def next(self):
         data = super(MongoCursor, self).next()
-        return self.as_class(data, _lang=self._lang)
+        return self.as_class(data, _lang=self._lang, from_db=True)
 
     def __getitem__(self, index):
         item = super(MongoCursor, self).__getitem__(index)
         if isinstance(index, slice):
             return item
         else:
-            return self.as_class(item, _lang=self._lang)
+            return self.as_class(item, _lang=self._lang, from_db=True)
 
 
 class BaseQuery(Collection):
@@ -377,6 +407,9 @@ class Model(AttrDict):
 
         :param inc_id: optional, if it if True - AutoincrementId
                     will be use for query, by default is False
+
+        :param from_db: attr to get object from db as instance,
+                    sets automatically
     """
     __metaclass__ = ModelType
 
@@ -406,7 +439,10 @@ class Model(AttrDict):
 
     inc_id = False
 
+    from_db = False
+
     def __init__(self, initial=None, **kwargs):
+        self.from_db = kwargs.pop('from_db', False)
         if not self._lang:
             self._lang = kwargs.pop('_lang', self._fallback_lang)
         dct = kwargs.copy()
@@ -423,7 +459,7 @@ class Model(AttrDict):
         if attr in self._protected_field_names:
             return dict.__setattr__(self, attr, value)
 
-        if attr in self.i18n:
+        if not self.from_db and attr in self.i18n:
             if attr not in self:
                 if not isinstance(value, dict) or self._lang not in value:
                     value = {self._lang: value}
@@ -431,6 +467,7 @@ class Model(AttrDict):
                 attrs = self[attr].copy()
                 attrs.update({self._lang: value})
                 value = attrs
+
         return super(Model, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
@@ -456,6 +493,7 @@ class Model(AttrDict):
         return self.query.find_one({'_id': _id}, _lang=self._lang)
 
     def update(self, spec=None, **kwargs):
+        self.from_db = False
         update_options = set(['upsert', 'manipulate', 'safe',
                               'multi', '_check_keys'])
         spec = spec or {}

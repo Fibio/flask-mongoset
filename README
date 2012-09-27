@@ -1,4 +1,14 @@
 Flask-MongoObject
+Settings:
+        'MONGODB_HOST' - mongo host name default = "localhost"
+        'MONGODB_PORT' - mongo port, default = 27017
+        'MONGODB_DATABASE' - mongo database name, default = ""
+        'MONGODB_AUTOREF' - parametr to use Dbrefs for save nested objects,
+                            if it is False nested objects will be saved like dictionaries,
+                            else - nested objects will be saved like Dbrefs, default =  False
+        'AUTOINCREMENT' - mongo parametr to use autoincrement ids in models, default =  True
+        'FALLBACK_LANG' - mongo, default =  'en'
+
 
 Access MongoDB from your Flask application.
 
