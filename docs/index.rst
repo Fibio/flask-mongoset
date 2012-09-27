@@ -10,7 +10,7 @@ objects, internationalization, quering, id_autoincrementing, inheritance.
 The extensions is based on `Flask_MongoObject`_
 but added/removed a few features on its own.
 
-Installing Flask-Script
+Installing Flask-MongoSet
 -------------------------------
 
 Install with **pip** and **easy_install**::
