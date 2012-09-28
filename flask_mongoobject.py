@@ -309,38 +309,47 @@ class ModelType(type):
         for model in bases:
 
             if hasattr(model, '__abstract__'):
-                '__abstract__' not in dct and dct.__setitem__('__abstract__', False)
-                base_attrs = ['i18n', 'indexes', 'required_fields']
-                for attr in base_attrs:
-                    total = list(set(getattr(model, attr, []))|set(dct.get(attr, [])))
-                    total and dct.update({attr: total})
+                if '__abstract__' not in dct:
+                    dct.__setitem__('__abstract__', False)
+                key_attrs = ['i18n', 'indexes', 'required_fields']
+
+                for attr in key_attrs:
+                    base_attrs = set(getattr(model, attr, []))
+                    child_attrs = set(dct.get(attr, []))
+                    dct.update({attr: list(base_attrs | child_attrs)})
+
                 if model.structure and structure is not None:
-                    new_keys = list(set(model.structure.keys)|set(structure.keys))
-                    structure.keys = new_keys
+                    base_structure = set(model.structure.keys)
+                    child_structure = set(structure.keys)
+                    structure.keys = list(base_structure | child_structure)
+
                     structure.allow_any = structure.allow_any \
                                                  or model.structure.allow_any
                     structure.ignore_any = structure.ignore_any \
                                                  or model.structure.ignore_any
                     if not structure.allow_any:
-                        structure.extras = list(set(model.structure.extras)|set(structure.extras))
+                        structure.extras = list(set(model.structure.extras) |
+                                                set(structure.extras))
 
                     if not structure.ignore_any:
-                        structure.ignore = list(set(model.structure.ignore)|set(structure.ignore))
+                        structure.ignore = list(set(model.structure.ignore) |
+                                                set(structure.ignore))
                 elif model.structure:
                     dct['structure'] = model.structure
+
                 break
 
         # add required_fields:
-        if dct.get('required_fields'):
+        if 'required_fields' in dct:
             required_fields = dct.get('required_fields')
-            if dct.get('structure'):
+            if 'structure' in dct:
                 optional = filter(lambda key: key.name not in dct['required_fields'],
-                                  dct.get('structure').keys)
+                                  dct['structure'].keys)
                 optional = map(operator.attrgetter('name'), optional)
                 dct['structure'] = dct['structure'].make_optional(*optional)
             else:
-                struct = {}
-                dct['structure'] = t.Dict(struct.fromkeys(required_fields, t.Any)).allow_extra('*')
+                struct = dict.fromkeys(required_fields, t.Any)
+                dct['structure'] = t.Dict(struct)
 
         return type.__new__(cls, name, bases, dct)
 
@@ -352,10 +361,12 @@ class ModelType(type):
 
         if not hasattr(cls, '__abstract__'):
             # add model into DBrefs register:
-            cls.use_autorefs and autoref_collections.__setitem__(cls.__collection__, cls)
+            if cls.use_autorefs:
+                autoref_collections.__setitem__(cls.__collection__, cls)
 
             # add model into autoincrement_id register:
-            cls.inc_id and inc_collections.add(cls.__collection__)
+            if cls.inc_id:
+                inc_collections.add(cls.__collection__)
 
             # add indexes:
             if cls.indexes:
@@ -364,7 +375,8 @@ class ModelType(type):
                         cls.indexes.remove(index)
                         cls.indexes.append((index, ASCENDING))
 
-                cls.db and cls.query.ensure_index(cls.indexes)
+                if cls.db:
+                    cls.query.ensure_index(cls.indexes)
 
 
 class Model(AttrDict):
@@ -451,7 +463,8 @@ class Model(AttrDict):
 
         for field in self._protected_field_names:
             if field in dct:
-                raise AttributeError("Forbidden attribute name %s for model %s" % (field, self.__class__.__name__ ))
+                raise AttributeError("Forbidden attribute name {} for"
+                            " model {}".format(field, self.__class__.__name__))
         return super(Model, self).__init__(initial, **kwargs)
 
     def __setattr__(self, attr, value):
