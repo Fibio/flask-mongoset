@@ -4,18 +4,24 @@ Flask-MongoObject
 
 **Settings:**
 
-:MONGODB_HOST: default = 'localhost', MongoDB host name
-:MONGODB_PORT: default = 27017, MongoDB port number
-:MONGODB_DATABASE: default = "", MongoDB database name
-:MONGODB_USERNAME: default = None. Username to connect with
-:MONGODB_PASSWORD: default = None. Password to authenticate if username is provided.
-:MONGODB_AUTOREF: default =  False. When set to `True` — nested objects will be saved as DbRef, elsewhere it will be saved as dictionaries.
-:MONGODB_AUTOINCREMENT: default =  True. Telling MongoObject to use autoincremented integer for `_id`.
-:MONGODB_FALLBACK_LANG: default = 'en'. Fallback language used with i18n definition.
+``MONGODB_HOST`` — default = 'localhost', MongoDB host name.
 
-**Access MongoDB from your Flask application.**
+``MONGODB_PORT`` — default = 27017, MongoDB port number
 
-Usage:
+``MONGODB_DATABASE`` — default = "", MongoDB database name
+
+``MONGODB_USERNAME`` — default = None. Username to connect with
+
+``MONGODB_PASSWORD`` — default = None. Password to authenticate if username is provided.
+
+``MONGODB_AUTOREF`` — default =  False. When set to `True` — nested objects will be saved as DbRef, elsewhere it will be saved as dictionaries.
+
+``MONGODB_AUTOINCREMENT`` — default =  True. Telling MongoObject to use autoincremented integer for `_id`.
+
+``MONGODB_FALLBACK_LANG`` — default = 'en'. Fallback language used with i18n definition.
+
+
+**Usage:**
 
 ::
 
