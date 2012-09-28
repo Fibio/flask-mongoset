@@ -147,9 +147,8 @@ class AutoReferenceObject(AutoReference):
     use of the optional `database` support for DBRefs.
     """
 
-    def __init__(self, mongo):
-        self.mongo = mongo
-        self.__database = mongo.session
+    def __init__(self, session):
+        self.__database = session
 
     def transform_outgoing(self, son, collection):
         if collection.name in autoref_collections:
@@ -615,10 +614,12 @@ class MongoObject(object):
 
         @app.teardown_appcontext
         def close_connection(response):
-            self.connection.end_request()
+            state = get_state(app)
+            if state.connection is not None:
+                state.connection.end_request()
             return response
 
-        self.session = self.get_session()
+        self.session = self.get_session(app)
         self.Model.db = self.session
         self.Model._fallback_lang = app.config.get('MONGODB_FALLBACK_LANG')
 
@@ -648,7 +649,7 @@ class MongoObject(object):
 
         if app.config['MONGODB_AUTOREF']:
             session.add_son_manipulator(NamespaceInjector())
-            session.add_son_manipulator(AutoReferenceObject(self))
+            session.add_son_manipulator(AutoReferenceObject(session))
         if app.config['MONGODB_AUTOINCREMENT']:
             session.add_son_manipulator(AutoincrementId())
         return session
@@ -679,5 +680,6 @@ class MongoObject(object):
         return len(models) == 1 and models[0] or models
 
     def clear(self):
-        self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
-        self.connection.end_request()
+        state = get_state(self.app)
+        state.connection.drop_database(self.app.config['MONGODB_DATABASE'])
+        state.connection.end_request()
