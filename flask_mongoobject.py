@@ -671,8 +671,9 @@ class MongoObject(object):
         for model in models:
             if not hasattr(model, 'db') or not isinstance(model.db, Database):
                 setattr(model, 'db', self.session)
-            if model.indexes:
-                model.query.ensure_index(model.indexes)
+
+            for index in model.indexes:
+                model.query.ensure_index(index)
 
             setattr(model, '_fallback_lang',
                     self.app.config['MONGODB_FALLBACK_LANG'])
