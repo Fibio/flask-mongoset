@@ -19,15 +19,17 @@ from __future__ import absolute_import
 import copy
 import operator
 import trafaret as t
+
 from bson.dbref import DBRef
+
+from flask import abort
+
 from pymongo import Connection, ASCENDING
 from pymongo.cursor import Cursor
 from pymongo.database import Database
 from pymongo.collection import Collection
 from pymongo.son_manipulator import (SONManipulator, AutoReference,
                                      NamespaceInjector)
-
-from flask import abort
 
 
 # list of collections for models witch need autoincrement id
@@ -37,7 +39,7 @@ inc_collections = set([])
 autoref_collections = {}
 
 
-class AuthenticationIncorrect(Exception):
+class AuthenticationError(Exception):
     pass
 
 
@@ -93,14 +95,14 @@ class AttrDict(dict):
         return value
 
     def _change_method(self, method, *args, **kwargs):
-        """ Changes base dict methods to implemet dotnotation
+        """ Changes base dict methods to implemet dot notation
             and sets AttributeError instead KeyError
         """
         try:
             callmethod = operator.methodcaller(method, *args, **kwargs)
             return callmethod(super(AttrDict, self))
-        except KeyError as excn:
-            raise AttributeError(excn)
+        except KeyError as ex:
+            raise AttributeError(ex)
 
     def _setattrs(self, **kwargs):
         for key, value in kwargs.iteritems():
@@ -142,9 +144,8 @@ class AutoReferenceObject(AutoReference):
     use of the optional `database` support for DBRefs.
     """
 
-    def __init__(self, mongo):
-        self.mongo = mongo
-        self.__database = mongo.session
+    def __init__(self, mongoset):
+        self.__database = mongoset.session
 
     def transform_outgoing(self, son, collection):
         if collection.name in autoref_collections:
@@ -174,8 +175,8 @@ class SavedObject(SONManipulator):
     Takes document from db as class instance.
 
     This manipulator should probably only be used when the NamespaceInjector is
-    also being used, otherwise it doesn't make too much sense - nested documents
-    can only be taken from db as instace if they have an `_ns` field.
+    also being used, otherwise it doesn't make too much sense - nested
+    documents can only be taken from db as instace if they have an `_ns` field.
     """
 
     def transform_outgoing(self, son, collection):
@@ -246,7 +247,8 @@ class BaseQuery(Collection):
         # defines the fields that should be translated
         if self.i18n and spec:
             if not isinstance(spec, dict):
-                raise TypeError("The first argument must be an instance of dict")
+                raise TypeError("The first argument must be an instance of "
+                                "dict")
 
             for attr in spec.copy():
                 attrs = attr.split('.')
@@ -302,39 +304,49 @@ class ModelType(type):
 
         # inheritance from abstract models:
         for model in bases:
+
             if getattr(model, '__abstract__', None) is True:
-                '__abstract__' not in dct and dct.__setitem__('__abstract__', False)
-                base_attrs = ['i18n', 'indexes', 'required_fields']
-                for attr in base_attrs:
-                    total = list(set(getattr(model, attr, []))|set(dct.get(attr, [])))
-                    total and dct.update({attr: total})
+                if '__abstract__' not in dct:
+                    dct.__setitem__('__abstract__', False)
+                key_attrs = ['i18n', 'indexes', 'required_fields']
+
+                for attr in key_attrs:
+                    base_attrs = set(getattr(model, attr, []))
+                    child_attrs = set(dct.get(attr, []))
+                    dct.update({attr: list(base_attrs | child_attrs)})
+
                 if model.structure and structure is not None:
-                    new_keys = list(set(model.structure.keys)|set(structure.keys))
-                    structure.keys = new_keys
+                    base_structure = set(model.structure.keys)
+                    child_structure = set(structure.keys)
+                    structure.keys = list(base_structure | child_structure)
+
                     structure.allow_any = structure.allow_any \
                                                  or model.structure.allow_any
                     structure.ignore_any = structure.ignore_any \
                                                  or model.structure.ignore_any
                     if not structure.allow_any:
-                        structure.extras = list(set(model.structure.extras)|set(structure.extras))
+                        structure.extras = list(set(model.structure.extras) |
+                                                set(structure.extras))
 
                     if not structure.ignore_any:
-                        structure.ignore = list(set(model.structure.ignore)|set(structure.ignore))
+                        structure.ignore = list(set(model.structure.ignore) |
+                                                set(structure.ignore))
                 elif model.structure:
                     dct['structure'] = model.structure
+
                 break
 
         # add required_fields:
-        if dct.get('required_fields'):
+        if 'required_fields' in dct:
             required_fields = dct.get('required_fields')
-            if dct.get('structure'):
+            if 'structure' in dct:
                 optional = filter(lambda key: key.name not in dct['required_fields'],
-                                  dct.get('structure').keys)
+                                  dct['structure'].keys)
                 optional = map(operator.attrgetter('name'), optional)
                 dct['structure'] = dct['structure'].make_optional(*optional)
             else:
-                struct = {}
-                dct['structure'] = t.Dict(struct.fromkeys(required_fields, t.Any)).allow_extra('*')
+                struct = dict.fromkeys(required_fields, t.Any)
+                dct['structure'] = t.Dict(struct).allow_extra('*')
 
         return type.__new__(cls, name, bases, dct)
 
@@ -344,12 +356,14 @@ class ModelType(type):
         names = [model.__dict__.keys() for model in cls.__mro__]
         cls._protected_field_names = list(protected_field_names.union(*names))
 
-        if not getattr(cls, '__abstract__', False):
+        if getattr (cls, '__abstract__', None) is not True:
             # add model into DBrefs register:
-            cls.use_autorefs and autoref_collections.__setitem__(cls.__collection__, cls)
+            if cls.use_autorefs:
+                autoref_collections.__setitem__(cls.__collection__, cls)
 
             # add model into autoincrement_id register:
-            cls.inc_id and inc_collections.add(cls.__collection__)
+            if cls.inc_id:
+                inc_collections.add(cls.__collection__)
 
             # add indexes:
             if cls.indexes:
@@ -358,7 +372,8 @@ class ModelType(type):
                         cls.indexes.remove(index)
                         cls.indexes.append((index, ASCENDING))
 
-                cls.db and cls.query.ensure_index(cls.indexes)
+                if cls.db:
+                    cls.query.ensure_index(cls.indexes)
 
 
 class Model(AttrDict):
@@ -383,7 +398,7 @@ class Model(AttrDict):
 
         :param i18n: optional, list of fields that need to translate
 
-        :param db: Mondodb, it is defining by MongoObject
+        :param db: Mondodb, it is defining by MongoSet
 
         :param indexes: optional, list of fields that need to index
 
@@ -445,7 +460,8 @@ class Model(AttrDict):
 
         for field in self._protected_field_names:
             if field in dct:
-                raise AttributeError("Forbidden attribute name %s for model %s" % (field, self.__class__.__name__ ))
+                raise AttributeError("Forbidden attribute name {} for"
+                            " model {}".format(field, self.__class__.__name__))
         return super(Model, self).__init__(initial, **kwargs)
 
     def __setattr__(self, attr, value):
@@ -519,7 +535,8 @@ class Model(AttrDict):
         instance = cls.query.find_one(*args, **kwargs)
         if not instance:
             if not spec or not isinstance(spec[0], dict):
-                raise InitDataError("first argument must be an instance of dict with init data")
+                raise InitDataError("first argument must be an instance of "
+                                    "dict with init data")
             instance = cls.create(spec[0], **kwargs)
 
         return instance
@@ -532,15 +549,23 @@ class Model(AttrDict):
         return str(self).decode('utf-8')
 
 
+def get_state(app):
+    """Gets the state for the application"""
+    assert 'mongoset' in app.extensions, \
+        'The mongoset extension was not registered to the current ' \
+        'application.  Please make sure to call init_app() first.'
+    return app.extensions['mongoset']
+
+
 class MongoSet(object):
-    """ This class is used to control the MongoObject integration
+    """ This class is used to control the MongoSet integration
         to Flask application.
         Adds :param db: and :param _fallback_lang: into Model
 
     Usage:
 
         app = Flask(__name__)
-        mongo = MongoObject(app)
+        mongo = MongoSet(app)
 
     This class also provides access to mongo Model:
 
@@ -553,11 +578,11 @@ class MongoSet(object):
         indexes = ['id']
 
     via register method:
-        mongo = MongoObject(app)
+        mongo = MongoSet(app)
         mongo.register(Product, OtherModel)
 
     or via decorator:
-        from flaskext.mongoobject import Model
+        from flaskext.mongoSet import Model
 
         @mongo.register
         class Product(Model):
@@ -565,21 +590,37 @@ class MongoSet(object):
     """
     def __init__(self, app=None):
         self.Model = Model
+
         if app is not None:
             self.init_app(app)
+        else:
+            self.app = None
 
     def init_app(self, app):
         app.config.setdefault('MONGODB_HOST', "localhost")
         app.config.setdefault('MONGODB_PORT', 27017)
+        app.config.setdefault('MONGODB_USERNAME', '')
+        app.config.setdefault('MONGODB_PASSWORD', '')
         app.config.setdefault('MONGODB_DATABASE', "")
-        app.config.setdefault('MONGODB_AUTOREF', False)
-        app.config.setdefault('AUTOINCREMENT', True)
-        app.config.setdefault('FALLBACK_LANG', 'en')
+        app.config.setdefault('MONGODB_AUTOREF', True)
+        app.config.setdefault('MONGODB_AUTOINCREMENT', True)
+        app.config.setdefault('MONGODB_FALLBACK_LANG', 'en')
+        app.config.setdefault('MONGODB_SLAVE_OKAY', False)
         self.app = app
+        if not hasattr(app, 'extensions'):
+            app.extensions = {}
+        app.extensions['mongoset'] = self
         self.connect()
-        self.app.after_request(self.close_connection)
+
+        @app.teardown_appcontext
+        def close_connection(response):
+            state = get_state(app)
+            if state.connection is not None:
+                state.connection.end_request()
+            return response
+
         self.Model.db = self.session
-        self.Model._fallback_lang = app.config.get('FALLBACK_LANG')
+        self.Model._fallback_lang = app.config.get('MONGODB_FALLBACK_LANG')
 
     def connect(self):
         """Connect to the MongoDB server and register the documents from
@@ -588,7 +629,7 @@ class MongoSet(object):
         ``MONGODB_DATABASE``.
         """
         if not getattr(self, 'app', None):
-            raise RuntimeError('The mongoobject extension was not init to '
+            raise RuntimeError('The mongoset extension was not init to '
                                'the current application.  Please make sure '
                                'to call init_app() first.')
         if not getattr(self, 'connection', None):
@@ -597,43 +638,44 @@ class MongoSet(object):
                 port=self.app.config.get('MONGODB_PORT'),
                 slave_okay=self.app.config.get('MONGODB_SLAVE_OKAY', False))
 
-        if self.app.config.get('MONGODB_USERNAME') is not None:
+        if self.app.config.get('MONGODB_USERNAME') is not '':
             auth_success = self.session.authenticate(
                 self.app.config.get('MONGODB_USERNAME'),
                 self.app.config.get('MONGODB_PASSWORD'))
             if not auth_success:
-                raise AuthenticationIncorrect("can't connect to data base, wrong user_name or password")
+                raise AuthenticationError("can't connect to data base,"
+                                          " wrong user_name or password")
 
     def register(self, *models):
-        """Register one or more :class:`mongoobject.Model` instances to the
+        """Register one or more :class:`mongoset.Model` instances to the
         connection.
         """
-
         for model in models:
-            if not getattr(model, 'db', None) or not isinstance(model.db, Database):
+            if getattr(model, 'db', None) is None \
+               or not isinstance(model.db, Database):
                 setattr(model, 'db', self.session)
-            setattr(model, '_fallback_lang', self.app.config.get('FALLBACK_LANG'))
+
             model.indexes and model.query.ensure_index(model.indexes)
+
+            setattr(model, '_fallback_lang',
+                    self.app.config['MONGODB_FALLBACK_LANG'])
+
         return len(models) == 1 and models[0] or models
 
     @property
     def session(self):
         """ Returns MongoDB
         """
-        if not getattr(self, "db", None):
+        if not hasattr(self, "db"):
             self.db = self.connection[self.app.config['MONGODB_DATABASE']]
             self.db.add_son_manipulator(NamespaceInjector())
             if self.app.config['MONGODB_AUTOREF']:
                 self.db.add_son_manipulator(AutoReferenceObject(self))
             else:
                 self.db.add_son_manipulator(SavedObject())
-            if self.app.config['AUTOINCREMENT']:
+            if self.app.config['MONGODB_AUTOINCREMENT']:
                 self.db.add_son_manipulator(AutoincrementId())
         return self.db
-
-    def close_connection(self, response):
-        self.connection.end_request()
-        return response
 
     def clear(self):
         self.connection.drop_database(self.app.config['MONGODB_DATABASE'])
