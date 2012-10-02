@@ -307,7 +307,7 @@ class ModelType(type):
         # inheritance from abstract models:
         for model in bases:
 
-            if hasattr(model, '__abstract__'):
+            if getattr(model, '__abstract__', None) is True:
                 if '__abstract__' not in dct:
                     dct.__setitem__('__abstract__', False)
                 key_attrs = ['i18n', 'indexes', 'required_fields']
@@ -348,7 +348,7 @@ class ModelType(type):
                 dct['structure'] = dct['structure'].make_optional(*optional)
             else:
                 struct = dict.fromkeys(required_fields, t.Any)
-                dct['structure'] = t.Dict(struct)
+                dct['structure'] = t.Dict(struct).allow_extra('*')
 
         return type.__new__(cls, name, bases, dct)
 
@@ -358,7 +358,7 @@ class ModelType(type):
         names = [model.__dict__.keys() for model in cls.__mro__]
         cls._protected_field_names = list(protected_field_names.union(*names))
 
-        if not hasattr(cls, '__abstract__'):
+        if getattr (cls, '__abstract__', None) is not True:
             # add model into DBrefs register:
             if cls.use_autorefs:
                 autoref_collections.__setitem__(cls.__collection__, cls)
@@ -604,7 +604,7 @@ class MongoObject(object):
         self._engine_lock = Lock()
 
         if app is not None:
-            self.app = app
+            # self.app = app
             self.init_app(app)
         else:
             self.app = None
@@ -616,10 +616,10 @@ class MongoObject(object):
         app.config.setdefault('MONGODB_PASSWORD', '')
         app.config.setdefault('MONGODB_DATABASE', "")
         app.config.setdefault('MONGODB_AUTOREF', True)
-        app.config.setdefault('MONGODB_AUTOINCREMENT', False)
+        app.config.setdefault('MONGODB_AUTOINCREMENT', True)
         app.config.setdefault('MONGODB_FALLBACK_LANG', 'en')
         app.config.setdefault('MONGODB_SLAVE_OKAY', False)
-
+        self.app = app
         if not hasattr(app, 'extensions'):
             app.extensions = {}
         app.extensions['mongoobject'] = _MongoObjectState(self, app)
@@ -658,12 +658,14 @@ class MongoObject(object):
             if not session.authenticate(username, password):
                 raise AuthenticationError("Can't connect to database, "
                                           "wrong user_name or password")
-
+        session.add_son_manipulator(NamespaceInjector())
         if app.config['MONGODB_AUTOREF']:
-            session.add_son_manipulator(NamespaceInjector())
             session.add_son_manipulator(AutoReferenceObject(session))
+        else:
+            session.add_son_manipulator(SavedObject())
         if app.config['MONGODB_AUTOINCREMENT']:
             session.add_son_manipulator(AutoincrementId())
+
         return session
 
     def connect(self, app):
@@ -681,11 +683,11 @@ class MongoObject(object):
         connection.
         """
         for model in models:
-            if not hasattr(model, 'db') or not isinstance(model.db, Database):
+            if getattr(model, 'db', None) is None \
+               or not isinstance(model.db, Database):
                 setattr(model, 'db', self.session)
 
-            for index in model.indexes:
-                model.query.ensure_index(index)
+            model.indexes and model.query.ensure_index(model.indexes)
 
             setattr(model, '_fallback_lang',
                     self.app.config['MONGODB_FALLBACK_LANG'])
