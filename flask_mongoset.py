@@ -53,7 +53,7 @@ class ClassProperty(property):
     """
     def __init__(self, method, *args, **kwargs):
         method = classmethod(method)
-        return super(ClassProperty, self).__init__(method, *args, **kwargs)
+        super(ClassProperty, self).__init__(method, *args, **kwargs)
 
     def __get__(self, cls, owner):
         return self.fget.__get__(None, owner)()
@@ -73,7 +73,7 @@ class AttrDict(dict):
     """
     def __init__(self, initial=None, **kwargs):
         initial and kwargs.update(**initial)
-        return self._setattrs(**kwargs)
+        self._setattrs(**kwargs)
 
     def __getattr__(self, attr):
         return self._change_method('__getitem__', attr)
@@ -208,7 +208,7 @@ class MongoCursor(Cursor):
     def __init__(self, *args, **kwargs):
         self._lang = kwargs.pop('_lang')
         self.as_class = kwargs.pop('as_class')
-        return super(MongoCursor, self).__init__(*args, **kwargs)
+        super(MongoCursor, self).__init__(*args, **kwargs)
 
     def next(self):
         data = super(MongoCursor, self).next()
@@ -462,7 +462,7 @@ class Model(AttrDict):
             if field in dct:
                 raise AttributeError("Forbidden attribute name {} for"
                             " model {}".format(field, self.__class__.__name__))
-        return super(Model, self).__init__(initial, **kwargs)
+        super(Model, self).__init__(initial, **kwargs)
 
     def __setattr__(self, attr, value):
         if attr in self._protected_field_names:
