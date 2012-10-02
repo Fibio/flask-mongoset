@@ -561,9 +561,8 @@ def get_state(app):
 
 class _MongoObjectState(object):
 
-    def __init__(self, mongoobject, app):
+    def __init__(self, mongoobject):
         self.mongoobject = mongoobject
-        self.app = app
         self.connection = None
         self.session = None
 
@@ -604,7 +603,6 @@ class MongoObject(object):
         self._engine_lock = Lock()
 
         if app is not None:
-            # self.app = app
             self.init_app(app)
         else:
             self.app = None
@@ -622,7 +620,7 @@ class MongoObject(object):
         self.app = app
         if not hasattr(app, 'extensions'):
             app.extensions = {}
-        app.extensions['mongoobject'] = _MongoObjectState(self, app)
+        app.extensions['mongoobject'] = _MongoObjectState(self)
 
         @app.teardown_appcontext
         def close_connection(response):
@@ -640,12 +638,11 @@ class MongoObject(object):
 
         .. versionadded:: 0.12
         """
-        with self._engine_lock:
-            state = get_state(app)
-            if state.connection is None:
-                state.connection = self.connect(app)
-                state.session = self._make_session(app)
-            return state.session
+        state = get_state(app)
+        if state.connection is None:
+            state.connection = self.connect(app)
+            state.session = self._make_session(app)
+        return state.session
 
     def _make_session(self, app):
         state = get_state(app)
@@ -663,6 +660,7 @@ class MongoObject(object):
             session.add_son_manipulator(AutoReferenceObject(session))
         else:
             session.add_son_manipulator(SavedObject())
+
         if app.config['MONGODB_AUTOINCREMENT']:
             session.add_son_manipulator(AutoincrementId())
 
