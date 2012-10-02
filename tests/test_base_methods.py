@@ -1,4 +1,4 @@
-from flaskext.mongoobject import AttrDict
+from flask.ext.mongoobject import AttrDict
 from conftest import BaseTest
 
 

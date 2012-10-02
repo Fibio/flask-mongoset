@@ -20,7 +20,6 @@ import copy
 import operator
 import trafaret as t
 
-# from bson.son import SON
 from bson.dbref import DBRef
 
 from flask import abort
