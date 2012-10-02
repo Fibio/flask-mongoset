@@ -1,6 +1,6 @@
 import cProfile
 import flask
-from flaskext.mongoobject import MongoObject
+from flask.ext.mongoobject import MongoObject
 
 db = MongoObject()
 app = flask.Flask(__name__)

@@ -2,7 +2,7 @@ from operator import methodcaller, attrgetter
 import flask
 from bson.dbref import DBRef
 from werkzeug.exceptions import NotFound
-from flaskext.mongoobject import MongoObject, Model
+from flask.ext.mongoobject import MongoObject, Model
 
 
 db = MongoObject()
