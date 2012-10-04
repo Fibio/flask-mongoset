@@ -394,7 +394,7 @@ class Model(AttrDict):
                     the same as :param _fallback_lang:
 
         :param _fallback_lang: fallback model language, by default it is
-                    app.config.FALLBACK_LANG
+                    app.config.MONGO_FALLBACK_LANG
 
         :param i18n: optional, list of fields that need to translate
 
@@ -468,14 +468,8 @@ class Model(AttrDict):
         if attr in self._protected_field_names:
             return dict.__setattr__(self, attr, value)
 
-        if not self.from_db and attr in self.i18n:
-            if attr not in self:
-                if not isinstance(value, dict) or self._lang not in value:
-                    value = {self._lang: value}
-            else:
-                attrs = self[attr].copy()
-                attrs.update({self._lang: value})
-                value = attrs
+        if not self.from_db:
+            value = self._set_i18n_attr(attr, value)
 
         return super(Model, self).__setattr__(attr, value)
 
@@ -484,6 +478,17 @@ class Model(AttrDict):
         if attr in self.i18n:
             value = value.get(self._lang,
                               value.get(self._fallback_lang, value))
+        return value
+
+    def _set_i18n_attr(self, attr, value):
+        if attr in self.i18n:
+            if attr not in self:
+                if not isinstance(value, dict) or self._lang not in value:
+                    value = {self._lang: value}
+            else:
+                attrs = self[attr].copy()
+                attrs.update({self._lang: value})
+                value = attrs
         return value
 
     @classproperty
@@ -501,23 +506,38 @@ class Model(AttrDict):
         _id = self.save(*args, **kwargs)
         return self.query.find_one({'_id': _id}, _lang=self._lang)
 
-    def update(self, spec=None, **kwargs):
-        self.from_db = False
-        update_options = set(['upsert', 'manipulate', 'safe',
-                              'multi', '_check_keys'])
-        spec = spec or {}
-        new_attrs = list(kwargs.viewkeys() - update_options)
-        for k in new_attrs:
-            spec[k] = kwargs.pop(k)
-        self._setattrs(**spec)
-        data = self.structure.check(self)
-        self.query.update({"_id": self._id}, data, **kwargs)
-        return self
+    def update(self, data=None, **kwargs):
+        if data is None:
+            data = {}
+            update_options = set(['upsert', 'manipulate', 'safe',
+                                  'multi', '_check_keys'])
+            new_attrs = list(kwargs.viewkeys() - update_options)
+            for k in new_attrs:
+                data[k] = kwargs.pop(k)
+            data = {'$set': data}
 
-    def update_with_reload(self, spec=None, **kwargs):
+        to_set = {}
+
+        for key in data.keys():
+            if key.startswith('$'):
+                for attr, value in data[key].iteritems():
+                    data[key][attr] = self._set_i18n_attr(attr, value)
+            else:
+                data[key] = self._set_i18n_attr(key, data[key])
+                to_set.update({key: data.pop(key)})
+
+        if to_set:
+            if '$set' in data:
+                data['$set'].update(to_set)
+            else:
+                data['$set'] = to_set
+
+        return self.query.update({"_id": self._id}, data, **kwargs)
+
+    def update_with_reload(self, data=None, **kwargs):
         """ returns self with autorefs after update
         """
-        self.update(spec, **kwargs)
+        self.update(data, **kwargs)
         return self.query.find_one({'_id': self._id}, _lang=self._lang)
 
     def delete(self):

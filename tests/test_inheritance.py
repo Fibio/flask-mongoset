@@ -49,9 +49,9 @@ class TestValidation(BaseTest):
         assert result.name == 'Name'
         assert result.attrs.feature == 'ice'
         assert result.list_attrs == ['one', 'two']
-        result.update({'attrs': {'feature': 'glace', 'revision': 1}})
+        result = result.update_with_reload(
+                    {'attrs': {'feature': 'glace', 'revision': 1}})
         assert result.attrs.feature == 'glace'
-
         assert not self.model.query.find({'attrs.feature': 'ice'}).count()
         assert self.model.query.find({'name': 'Name'}).count() == 1
         assert self.model.query.count() == 1
