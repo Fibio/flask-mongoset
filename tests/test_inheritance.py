@@ -19,7 +19,11 @@ class BaseModel(Model):
 class SubAbstractModel(BaseModel):
     __abstract__ = True
     structure = t.Dict({
-        'list_attrs': t.List(t.String)
+        'list_attrs': t.List(t.String),
+        'salers': t.List(t.Dict({
+            'name': t.String,
+            'address': t.String
+        }))
     }).allow_extra('wrong_attr')
     indexes = [('quantity', DESCENDING), 'name']
     required_fields = ['list_attrs']
@@ -45,14 +49,14 @@ class TestValidation(BaseTest):
     def test_inheritance(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
                                 'attrs': {'feature': 'ice', 'revision': 1},
-                                'list_attrs': ['one', 'two']})
+                                'list_attrs': ['one', 'two'],
+                                })
         assert result.name == 'Name'
         assert result.attrs.feature == 'ice'
         assert result.list_attrs == ['one', 'two']
         result = result.update_with_reload(
-                    {'attrs': {'feature': 'glace', 'revision': 1}})
+                    {'$set': {'attrs': {'feature': 'glace', 'revision': 1}}})
         assert result.attrs.feature == 'glace'
-
         assert not self.model.query.find({'attrs.feature': 'ice'}).count()
         assert self.model.query.find({'name': 'Name'}).count() == 1
         assert self.model.query.count() == 1
@@ -92,4 +96,33 @@ class TestValidation(BaseTest):
         result = self.model.query.find_one({'name': 'Name'})
         assert result.id
 
+    def test_update(self):
+        result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
+                            'attrs': {'feature': 'ice', 'revision': 1},
+                            'list_attrs': ['one', 'two'],
+                            'salers': [{'name': 'John', 'address': 'NY'},
+                                       {'name': 'Jane', 'address': 'CA'}]})
+        result = result.update_with_reload(name='Fridge', quantity=30)
+        assert result.name == 'Fridge'
+        assert result.quantity == 30
 
+        result = result.update_with_reload({'$set': {
+                            'attrs': {'feature': 'no frost', 'revision': 2}}})
+        assert result.attrs.feature == 'no frost'
+        assert result.attrs.revision == 2
+
+        result = result.update_with_reload({'$push': {'list_attrs': 'three'}})
+        assert result.list_attrs == ['one', 'two', 'three']
+
+        result = result.update_with_reload({'$inc': {'quantity': 10}})
+        assert result.quantity == 40
+
+        result = result.update_with_reload({'$unset': {'quantity': 30}})
+        assert not 'quantity' in result
+
+        result = result.update_with_reload({'$pop': {'list_attrs': 'three'}})
+        assert result.list_attrs == ['one', 'two']
+
+        result = result.update_with_reload({'$pull': {
+                                'salers': {'name': 'John'}}})
+        assert not self.model.query.find_one({'salers.name': 'John'})

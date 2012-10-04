@@ -19,7 +19,8 @@ class i18nModel(BaseModel):
     __collection__ = "i18ntests"
     inc_id = True
     structure = t.Dict({
-        'list_attrs': t.List(t.String)
+        'list_attrs': t.List(t.String),
+        t.Key('list_names', default=[]): t.List(t.Int)
     }).allow_extra('*')
     i18n = ['list_attrs']
     indexes = [('quantity', DESCENDING), 'name']
@@ -81,9 +82,23 @@ class TestValidation(BaseTest):
         assert result.attrs.feature == 'ice'
         assert result.name == 'Name'
         assert result.list_attrs == ['one', 'two']
-        assert not self.model.query.find({'attrs.feature': 'something else'}).count()
+        assert not self.model.query.find({
+                        'attrs.feature': 'something else'}).count()
 
         assert self.model.get_or_create({'name': 'Nom', 'quantity': 1,
-                                         'attrs': {'feature': 'glace', 'revision': 1},
-                                         'list_attrs': ['un', 'deux']}, _lang='fr')
+                                'attrs': {'feature': 'glace', 'revision': 1},
+                                'list_attrs': ['un', 'deux']}, _lang='fr')
         assert self.model.query.count() == 1
+
+    def test_update(self):
+        result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
+                                'attrs': {'feature': 'ice', 'revision': 1},
+                                'list_attrs': ['one', 'two']}, _lang='en')
+        result._lang = 'fr'
+        result = result.update_with_reload({'attrs': {'feature': 'glace',
+                                                        'revision': 1}})
+        assert result.attrs.feature == 'glace'
+        result._lang = 'en'
+        assert result.attrs.feature == 'ice'
+        result = result.update_with_reload(
+                            {'$push': {'list_attrs': 'three'}})
