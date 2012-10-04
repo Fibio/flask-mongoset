@@ -259,7 +259,7 @@ class BaseQuery(Collection):
 
     def update(self, spec, document, **kwargs):
         if self.i18n:
-            lang = kwargs.pop('_lang', self.document_class._fallback_lang)
+            lang = kwargs.pop('_lang')
             for attr, value in document.items():
                 if attr.startswith('$'):
                     document[attr] = self._insert_lang(value, lang)
@@ -467,8 +467,7 @@ class Model(AttrDict):
 
     def __init__(self, initial=None, **kwargs):
         self.from_db = kwargs.pop('from_db', False)
-        if not self._lang:
-            self._lang = kwargs.pop('_lang', self._fallback_lang)
+        self._lang = kwargs.pop('_lang', self._fallback_lang)
         dct = kwargs.copy()
 
         if initial and isinstance(initial, dict):
@@ -484,7 +483,7 @@ class Model(AttrDict):
         if attr in self._protected_field_names:
             return dict.__setattr__(self, attr, value)
 
-        if not self.from_db and attr in self.i18n:
+        if attr in self.i18n and not self.from_db:
             if attr not in self:
                 if not isinstance(value, dict) or self._lang not in value:
                     value = {self._lang: value}
@@ -525,14 +524,19 @@ class Model(AttrDict):
             for k in new_attrs:
                 data[k] = kwargs.pop(k)
             data = {'$set': data}
-        kwargs['_lang'] = self._lang
+
+        if self.i18n:
+            kwargs['_lang'] = self._lang
         return self.query.update({"_id": self._id}, data, **kwargs)
 
     def update_with_reload(self, data=None, **kwargs):
         """ returns self with autorefs after update
         """
         self.update(data, **kwargs)
-        return self.query.find_one({'_id': self._id}, _lang=self._lang)
+        result = self.query.find_one({'_id': self._id})
+        if self.i18n:
+            result._lang = self._lang
+        return result
 
     def delete(self):
         return self.query.remove(self._id)
@@ -545,7 +549,6 @@ class Model(AttrDict):
     @classmethod
     def get_or_create(cls, *args, **kwargs):
         spec = copy.deepcopy(args)
-        # TODO: spec = {'attr.name: 'Name'}
         instance = cls.query.find_one(*args, **kwargs)
         if not instance:
             if not spec or not isinstance(spec[0], dict):
