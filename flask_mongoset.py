@@ -244,20 +244,27 @@ class BaseQuery(Collection):
         kwargs['as_class'] = self.document_class
         kwargs['_lang'] = lang = kwargs.pop('_lang',
                                             self.document_class._fallback_lang)
+
         # defines the fields that should be translated
         if self.i18n and spec:
             if not isinstance(spec, dict):
                 raise TypeError("The first argument must be an instance of "
                                 "dict")
 
-            for attr in spec.copy():
-                attrs = attr.split('.')
-                if attrs[0] in self.i18n:
-                    attrs.insert(1, lang)
-                    spec['.'.join(attrs)] = spec.pop(attr)
+            spec = self._insert_lang(spec, lang)
             self._make_attrs(spec)
 
         return MongoCursor(self, *args, **kwargs)
+
+    def update(self, spec, document, **kwargs):
+        if self.i18n:
+            lang = kwargs.pop('_lang', self.document_class._fallback_lang)
+            for attr, value in document.items():
+                if attr.startswith('$'):
+                    document[attr] = self._insert_lang(value, lang)
+                else:
+                    document[attr] = {lang: value}
+        return super(BaseQuery, self).update(spec, document, **kwargs)
 
     def get(self, id):
         return self.find_one({'_id': id}) or self.find_one({'id': id})
@@ -282,6 +289,14 @@ class BaseQuery(Collection):
                     key = "{}.{}".format(attr, k)
                     kwargs[key] = v
         return kwargs
+
+    def _insert_lang(self, document, lang):
+        for attr in document.copy():
+            attrs = attr.split('.')
+            if attrs[0] in self.i18n:
+                attrs.insert(1, lang)
+                document['.'.join(attrs)] = document.pop(attr)
+        return document
 
 
 class ModelType(type):
@@ -468,20 +483,7 @@ class Model(AttrDict):
         if attr in self._protected_field_names:
             return dict.__setattr__(self, attr, value)
 
-        if not self.from_db:
-            value = self._set_i18n_attr(attr, value)
-
-        return super(Model, self).__setattr__(attr, value)
-
-    def __getattr__(self, attr):
-        value = super(Model, self).__getattr__(attr)
-        if attr in self.i18n:
-            value = value.get(self._lang,
-                              value.get(self._fallback_lang, value))
-        return value
-
-    def _set_i18n_attr(self, attr, value):
-        if attr in self.i18n:
+        if not self.from_db and attr in self.i18n:
             if attr not in self:
                 if not isinstance(value, dict) or self._lang not in value:
                     value = {self._lang: value}
@@ -489,6 +491,13 @@ class Model(AttrDict):
                 attrs = self[attr].copy()
                 attrs.update({self._lang: value})
                 value = attrs
+        return super(Model, self).__setattr__(attr, value)
+
+    def __getattr__(self, attr):
+        value = super(Model, self).__getattr__(attr)
+        if attr in self.i18n:
+            value = value.get(self._lang,
+                              value.get(self._fallback_lang, value))
         return value
 
     @classproperty
@@ -515,23 +524,7 @@ class Model(AttrDict):
             for k in new_attrs:
                 data[k] = kwargs.pop(k)
             data = {'$set': data}
-
-        to_set = {}
-
-        for key in data.keys():
-            if key.startswith('$'):
-                for attr, value in data[key].iteritems():
-                    data[key][attr] = self._set_i18n_attr(attr, value)
-            else:
-                data[key] = self._set_i18n_attr(key, data[key])
-                to_set.update({key: data.pop(key)})
-
-        if to_set:
-            if '$set' in data:
-                data['$set'].update(to_set)
-            else:
-                data['$set'] = to_set
-
+        kwargs['_lang'] = self._lang
         return self.query.update({"_id": self._id}, data, **kwargs)
 
     def update_with_reload(self, data=None, **kwargs):

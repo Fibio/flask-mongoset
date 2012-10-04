@@ -1,4 +1,4 @@
-from flask.ext.mongoset import Model, autoref_collections
+from flask.ext.mongoset import Model
 from conftest import BaseModelTest, app, db
 
 
