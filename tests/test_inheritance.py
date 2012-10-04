@@ -111,18 +111,15 @@ class TestValidation(BaseTest):
         assert result.attrs.feature == 'no frost'
         assert result.attrs.revision == 2
 
-        result = result.update_with_reload({'$push': {'list_attrs': 'three'}})
+        result = result.update_with_reload({'$push': {'list_attrs': 'three'},
+                                        '$inc': {'quantity': 10},
+                                        '$pull': {'salers': {'name': 'John'}}})
         assert result.list_attrs == ['one', 'two', 'three']
-
-        result = result.update_with_reload({'$inc': {'quantity': 10}})
         assert result.quantity == 40
+        assert not self.model.query.find_one({'salers.name': 'John'})
 
         result = result.update_with_reload({'$unset': {'quantity': 30}})
         assert not 'quantity' in result
 
         result = result.update_with_reload({'$pop': {'list_attrs': 'three'}})
         assert result.list_attrs == ['one', 'two']
-
-        result = result.update_with_reload({'$pull': {
-                                'salers': {'name': 'John'}}})
-        assert not self.model.query.find_one({'salers.name': 'John'})
