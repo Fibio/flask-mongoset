@@ -53,16 +53,6 @@ class TestValidation(BaseTest):
         except t.DataError:
             assert True
 
-        result = self.model.create({'name': 'Name', 'quantity': 1,
-                                    'attrs': {'feature': 'ice', 'revision': 1},
-                                    'list_attrs': ['one', 'two']})
-
-        # try:
-        #     result.update(attrs={'featre': [1, 2, 3]})
-        #     assert False
-        # except t.DataError:
-        #     assert True
-
     def test_translate(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
                                     'attrs': {'feature': 'ice', 'revision': 1},
