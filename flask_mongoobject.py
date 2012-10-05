@@ -372,7 +372,7 @@ class ModelType(type):
         names = [model.__dict__.keys() for model in cls.__mro__]
         cls._protected_field_names = list(protected_field_names.union(*names))
 
-        if getattr (cls, '__abstract__', None) is not True:
+        if not cls.__abstract__:
             # add model into DBrefs register:
             if cls.use_autorefs:
                 autoref_collections.__setitem__(cls.__collection__, cls)
@@ -696,8 +696,7 @@ class MongoObject(object):
         connection.
         """
         for model in models:
-            if getattr(model, 'db', None) is None \
-               or not isinstance(model.db, Database):
+            if not model.db or not isinstance(model.db, Database):
                 setattr(model, 'db', self.session)
 
             model.indexes and model.query.ensure_index(model.indexes)
