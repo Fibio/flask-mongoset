@@ -264,6 +264,7 @@ class BaseQuery(Collection):
                     document[attr] = self._insert_lang(value, lang)
                 else:
                     document[attr] = {lang: value}
+
         return super(BaseQuery, self).update(spec, document, **kwargs)
 
     def get(self, id):
@@ -371,7 +372,7 @@ class ModelType(type):
         names = [model.__dict__.keys() for model in cls.__mro__]
         cls._protected_field_names = list(protected_field_names.union(*names))
 
-        if getattr (cls, '__abstract__', None) is not True:
+        if not cls.__abstract__:
             # add model into DBrefs register:
             if cls.use_autorefs:
                 autoref_collections.__setitem__(cls.__collection__, cls)
@@ -526,6 +527,7 @@ class Model(AttrDict):
 
         if self.i18n:
             kwargs['_lang'] = self._lang
+
         return self.query.update({"_id": self._id}, data, **kwargs)
 
     def update_with_reload(self, data=None, **kwargs):
@@ -644,11 +646,11 @@ class MongoSet(object):
         ``MONGODB_PASSWORD`` then you will be authenticated at the
         ``MONGODB_DATABASE``.
         """
-        if not getattr(self, 'app', None):
+        if not hasattr(self, 'app'):
             raise RuntimeError('The mongoset extension was not init to '
                                'the current application.  Please make sure '
                                'to call init_app() first.')
-        if not getattr(self, 'connection', None):
+        if not hasattr(self, 'connection'):
             self.connection = Connection(
                 host=self.app.config.get('MONGODB_HOST'),
                 port=self.app.config.get('MONGODB_PORT'),
@@ -667,8 +669,7 @@ class MongoSet(object):
         connection.
         """
         for model in models:
-            if getattr(model, 'db', None) is None \
-               or not isinstance(model.db, Database):
+            if not model.db or not isinstance(model.db, Database):
                 setattr(model, 'db', self.session)
 
             model.indexes and model.query.ensure_index(model.indexes)
