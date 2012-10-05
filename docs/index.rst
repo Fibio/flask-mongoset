@@ -192,10 +192,10 @@ A list of configuration keys of the extensions
                                 converted in instances after query
                                 else - nested objects will be saved
                                 like Dbrefs, default -  False
-``AUTOINCREMENT``               parametr to use autoincrement ids in
+``MONGODB_AUTOINCREMENT``       parametr to use autoincrement ids in
                                 models, default -  True, for usage you
                                 should set the model attribute inc_id to True
-``FALLBACK_LANG``               fallback language, default - 'en'
+``MONGODB_FALLBACK_LANG``       fallback language, default - 'en'
 =============================== =========================================
 
 
