@@ -20,8 +20,8 @@ setup(
     version='0.1.1',
     url='https://github.com/Fibio/flask-mongoset',
     license='MIT',
-    author='fibio',
-    author_email='fibio.tany@gmail.com',
+    author='Yehor Nazarkin, Tatyana Kuznetsova',
+    author_email='nimnull@gmail.com, fibio.tany@gmail.com',
     description='Access MongoDB from your Flask application',
     long_description=__doc__,
     py_modules=[

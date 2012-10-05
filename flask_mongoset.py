@@ -410,7 +410,7 @@ class Model(AttrDict):
                     the same as :param _fallback_lang:
 
         :param _fallback_lang: fallback model language, by default it is
-                    app.config.MONGO_FALLBACK_LANG
+                    app.config.MONGODB_FALLBACK_LANG
 
         :param i18n: optional, list of fields that need to translate
 
@@ -600,7 +600,7 @@ class MongoSet(object):
         mongo.register(Product, OtherModel)
 
     or via decorator:
-        from flaskext.mongoSet import Model
+        from flask.ext.mongoset import Model
 
         @mongo.register
         class Product(Model):
