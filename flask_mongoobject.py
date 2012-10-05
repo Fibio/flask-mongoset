@@ -246,20 +246,26 @@ class BaseQuery(Collection):
         kwargs['as_class'] = self.document_class
         kwargs['_lang'] = lang = kwargs.pop('_lang',
                                             self.document_class._fallback_lang)
+
         # defines the fields that should be translated
         if self.i18n and spec:
             if not isinstance(spec, dict):
                 raise TypeError("The first argument must be an instance of "
                                 "dict")
-
-            for attr in spec.copy():
-                attrs = attr.split('.')
-                if attrs[0] in self.i18n:
-                    attrs.insert(1, lang)
-                    spec['.'.join(attrs)] = spec.pop(attr)
+            spec = self._insert_lang(spec, lang)
             self._make_attrs(spec)
 
         return MongoCursor(self, *args, **kwargs)
+
+    def update(self, spec, document, **kwargs):
+        if self.i18n:
+            lang = kwargs.pop('_lang')
+            for attr, value in document.items():
+                if attr.startswith('$'):
+                    document[attr] = self._insert_lang(value, lang)
+                else:
+                    document[attr] = {lang: value}
+        return super(BaseQuery, self).update(spec, document, **kwargs)
 
     def get(self, id):
         return self.find_one({'_id': id}) or self.find_one({'id': id})
@@ -284,6 +290,14 @@ class BaseQuery(Collection):
                     key = "{}.{}".format(attr, k)
                     kwargs[key] = v
         return kwargs
+
+    def _insert_lang(self, document, lang):
+        for attr in document.copy():
+            attrs = attr.split('.')
+            if attrs[0] in self.i18n:
+                attrs.insert(1, lang)
+                document['.'.join(attrs)] = document.pop(attr)
+        return document
 
 
 class ModelType(type):
@@ -358,7 +372,7 @@ class ModelType(type):
         names = [model.__dict__.keys() for model in cls.__mro__]
         cls._protected_field_names = list(protected_field_names.union(*names))
 
-        if getattr (cls, '__abstract__', None) is not True:
+        if not cls.__abstract__:
             # add model into DBrefs register:
             if cls.use_autorefs:
                 autoref_collections.__setitem__(cls.__collection__, cls)
@@ -396,7 +410,7 @@ class Model(AttrDict):
                     the same as :param _fallback_lang:
 
         :param _fallback_lang: fallback model language, by default it is
-                    app.config.FALLBACK_LANG
+                    app.config.MONGODB_FALLBACK_LANG
 
         :param i18n: optional, list of fields that need to translate
 
@@ -453,8 +467,7 @@ class Model(AttrDict):
 
     def __init__(self, initial=None, **kwargs):
         self.from_db = kwargs.pop('from_db', False)
-        if not self._lang:
-            self._lang = kwargs.pop('_lang', self._fallback_lang)
+        self._lang = kwargs.pop('_lang', self._fallback_lang)
         dct = kwargs.copy()
 
         if initial and isinstance(initial, dict):
@@ -470,7 +483,7 @@ class Model(AttrDict):
         if attr in self._protected_field_names:
             return dict.__setattr__(self, attr, value)
 
-        if not self.from_db and attr in self.i18n:
+        if attr in self.i18n and not self.from_db:
             if attr not in self:
                 if not isinstance(value, dict) or self._lang not in value:
                     value = {self._lang: value}
@@ -478,7 +491,6 @@ class Model(AttrDict):
                 attrs = self[attr].copy()
                 attrs.update({self._lang: value})
                 value = attrs
-
         return super(Model, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
@@ -503,24 +515,28 @@ class Model(AttrDict):
         _id = self.save(*args, **kwargs)
         return self.query.find_one({'_id': _id}, _lang=self._lang)
 
-    def update(self, spec=None, **kwargs):
-        self.from_db = False
-        update_options = set(['upsert', 'manipulate', 'safe',
-                              'multi', '_check_keys'])
-        spec = spec or {}
-        new_attrs = list(kwargs.viewkeys() - update_options)
-        for k in new_attrs:
-            spec[k] = kwargs.pop(k)
-        self._setattrs(**spec)
-        data = self.structure.check(self)
-        self.query.update({"_id": self._id}, data, **kwargs)
-        return self
+    def update(self, data=None, **kwargs):
+        if data is None:
+            data = {}
+            update_options = set(['upsert', 'manipulate', 'safe',
+                                  'multi', '_check_keys'])
+            new_attrs = list(kwargs.viewkeys() - update_options)
+            for k in new_attrs:
+                data[k] = kwargs.pop(k)
+            data = {'$set': data}
 
-    def update_with_reload(self, spec=None, **kwargs):
+        if self.i18n:
+            kwargs['_lang'] = self._lang
+        return self.query.update({"_id": self._id}, data, **kwargs)
+
+    def update_with_reload(self, data=None, **kwargs):
         """ returns self with autorefs after update
         """
-        self.update(spec, **kwargs)
-        return self.query.find_one({'_id': self._id}, _lang=self._lang)
+        self.update(data, **kwargs)
+        result = self.query.find_one({'_id': self._id})
+        if self.i18n:
+            result._lang = self._lang
+        return result
 
     def delete(self):
         return self.query.remove(self._id)
@@ -533,7 +549,6 @@ class Model(AttrDict):
     @classmethod
     def get_or_create(cls, *args, **kwargs):
         spec = copy.deepcopy(args)
-        # TODO: spec = {'attr.name: 'Name'}
         instance = cls.query.find_one(*args, **kwargs)
         if not instance:
             if not spec or not isinstance(spec[0], dict):
@@ -681,8 +696,7 @@ class MongoObject(object):
         connection.
         """
         for model in models:
-            if getattr(model, 'db', None) is None \
-               or not isinstance(model.db, Database):
+            if not model.db or not isinstance(model.db, Database):
                 setattr(model, 'db', self.session)
 
             model.indexes and model.query.ensure_index(model.indexes)

@@ -25,10 +25,3 @@ class TestValidation(BaseTest):
             assert False
         except t.DataError:
             assert True
-
-        result = self.model.create({'key': 'foo', 'quantity': 1})
-        try:
-            result.update(quantity='two')
-            assert False
-        except t.DataError:
-            assert True

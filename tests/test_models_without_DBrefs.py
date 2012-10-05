@@ -19,7 +19,12 @@ class TestModelDecorator(BaseModelTest):
             __collection__ = 'notdbrefstests'
             inc_id = True
             indexes = ['id', 'name']
+
+        class InsideModel(Model):
+            __collection__ = 'inside'
+
         self.model = NewModel
+        self.insideModel = InsideModel
 
     def test_autoincrement(self):
         result = self.model.create(name='Hello')
@@ -40,3 +45,11 @@ class TestModelDecorator(BaseModelTest):
         child = child.update_with_reload({
             'parents': [parent]})
         assert child.parents[0].test == "test_two"
+
+    def test_other_object_inside(self):
+        child = self.insideModel({'inside': True,
+                             '_ns': self.insideModel.__collection__})
+        parent = self.model.create({'test': 'hellotest',
+                                    'children': [child], 'names': ['ddd']})
+        assert isinstance(parent.children[0], self.insideModel)
+        assert self.insideModel.query.find_one() is None

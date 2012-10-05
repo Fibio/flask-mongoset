@@ -19,9 +19,14 @@ class i18nModel(BaseModel):
     __collection__ = "i18ntests"
     inc_id = True
     structure = t.Dict({
-        'list_attrs': t.List(t.String)
+        'list_attrs': t.List(t.String),
+        'salers': t.List(t.Dict({
+            'name': t.String,
+            'address': t.String
+        })),
+        t.Key('list_sku', default=[]): t.List(t.Int)
     }).allow_extra('*')
-    i18n = ['list_attrs']
+    i18n = ['list_attrs', 'salers']
     indexes = [('quantity', DESCENDING), 'name']
 
 
@@ -48,31 +53,21 @@ class TestValidation(BaseTest):
         except t.DataError:
             assert True
 
-        result = self.model.create({'name': 'Name', 'quantity': 1,
-                                    'attrs': {'feature': 'ice', 'revision': 1},
-                                    'list_attrs': ['one', 'two']})
-
-        try:
-            result.update(attrs={'featre': [1, 2, 3]})
-            assert False
-        except t.DataError:
-            assert True
-
     def test_translate(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
                                     'attrs': {'feature': 'ice', 'revision': 1},
                                     'list_attrs': ['one', 'two']}, _lang='en')
         assert result.name == 'Name'
         result._lang = 'fr'
-        result.update({'name': 'Nom'})
+        result = result.update_with_reload(name='Nom')
 
         # attr name translated but not feature and list_attrs:
         assert result.name == 'Nom'
         assert result.attrs.feature == 'ice'
         assert result.list_attrs == ['one', 'two']
 
-        result.update({'attrs': {'feature': 'glace', 'revision': 1}})
-        result.update({'list_attrs': ['un', 'deux']})
+        result.update(attrs={'feature': 'glace', 'revision': 1},
+                      list_attrs=['un', 'deux'])
 
         result = self.model.query.find_one({'name': 'Nom'}, _lang='fr')
         assert result.attrs.feature == 'glace'
@@ -81,9 +76,47 @@ class TestValidation(BaseTest):
         assert result.attrs.feature == 'ice'
         assert result.name == 'Name'
         assert result.list_attrs == ['one', 'two']
-        assert not self.model.query.find({'attrs.feature': 'something else'}).count()
+        assert not self.model.query.find({
+                        'attrs.feature': 'something else'}).count()
 
         assert self.model.get_or_create({'name': 'Nom', 'quantity': 1,
-                                         'attrs': {'feature': 'glace', 'revision': 1},
-                                         'list_attrs': ['un', 'deux']}, _lang='fr')
+                                'attrs': {'feature': 'glace', 'revision': 1},
+                                'list_attrs': ['un', 'deux']}, _lang='fr')
         assert self.model.query.count() == 1
+
+    def test_update(self):
+        result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
+                                'attrs': {'feature': 'ice', 'revision': 1},
+                                'list_attrs': ['one', 'two'],
+                                'salers': [{'name': 'John', 'address': 'NY'},
+                                           {'name': 'Jane', 'address': 'CA'}]},
+                                _lang='en')
+        result._lang = 'fr'
+        result = result.update_with_reload(attrs={'feature': 'glace',
+                                                  'revision': 1})
+        assert result.attrs.feature == 'glace'
+        result._lang = 'en'
+        assert result.attrs.feature == 'ice'
+
+        result = result.update_with_reload(name='Fridge', quantity=30)
+        assert result.name == 'Fridge'
+        assert result.quantity == 30
+
+        result = result.update_with_reload({'$set': {
+                            'attrs': {'feature': 'no frost', 'revision': 2}}})
+        assert result.attrs.feature == 'no frost'
+        assert result.attrs.revision == 2
+
+        result = result.update_with_reload({'$push': {'list_attrs': 'three',
+                                                      'list_sku': 1},
+                                            '$inc': {'quantity': 10}})
+        assert result.list_attrs == ['one', 'two', 'three']
+        assert result.list_sku == [1]
+        assert result.quantity == 40
+
+        result = result.update_with_reload({'$unset': {'quantity': 30},
+                                        '$pop': {'list_attrs': 'three'},
+                                        '$pull': {'salers': {'name': 'John'}}})
+        assert not 'quantity' in result
+        assert result.list_attrs == ['one', 'two']
+        assert not self.model.query.find_one({'salers.name': 'John'})
