@@ -88,13 +88,13 @@ add data with new language:
 
 >>> product = Product.query.find_one({"title": "Name"}, _lang='en')
 >>> product._lang = 'fr'
->>> result.update({'title': 'Nom'})
+>>> result.update({'$set': {'title': 'Nom'}})
 
 create with language:
 
 >>> Product.create({'name': 'Name', 'quantity': 1, 'attrs':{'feature': 'ice', 'revision': 1}}, _lang='en)
 
-create with default _lang (defined in app.config)
+create with default _lang (defined in app.config.MONGODB_FALLBACK_LANG)
 
 >>> Product.create({'name': 'Name', 'quantity': 1, 'attrs':{'feature': 'ice', 'revision': 1}})
 
@@ -113,7 +113,45 @@ The :class:`Model` has a `query` attribute similar to  :mod:`Flask-SQLAlchemy` t
 can be used to query the collections.
 
 In fact, it's only a very thin layer to :class:`pymongo.Collection`, so it supports
-all :class:`Collection` methods.
+all :class:`Collection` methods, for example 'update' method you have to use with mongodb modifiers,
+if you want to get updated instance, you have to use update_with_reload method:
+
+>>> product = Product.create({'name': 'Name', 'attrs':['revision', 'class']})
+>>> assert product.name == 'Name'
+>>> product = product.update_with_reload({'$set':{'name': 'Fridge'}})
+>>> assert product.name == 'Fridge'
+
+>>> product = product.update_with_reload({'$push':{'attrs': 'volume'}})
+>>> assert product.attrs = ['revision', 'class', 'volume']
+
+Be carefull with simple update without modifiers:
+
+>>> print product
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Fridge', 'attrs': ['revision', 'class', 'volume']}>
+>>> product = product.update_with_reload({'name': 'Freezer'})
+>>> print product
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Freezer'}>
+
+But you can use update with kwargs:
+
+>>> print product
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Fridge', 'attrs': ['revision', 'class', 'volume']}>
+>>> product = product.update_with_reload(**{'name': 'Freezer'})
+>>> print product
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Freezer', 'attrs': ['revision', 'class', 'volume']}>
+>>> product = product.update_with_reload(name='NewFreezer')
+>>> print product
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'NewFreezer', 'attrs': ['revision', 'class', 'volume']}>
+
+'update' method is the same, but doesn't reload instance and returns 'None'
+
+>>> product.update(name='NewFridge')
+>>> print product
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'NewFreezer', 'attrs': ['revision', 'class', 'volume']}>
+>>> product.update(name='NewFridge')
+>>> print product
+Out: None
+
 
 You can define custom query to implement some changes into returned data
 or add some new methods::
@@ -193,7 +231,7 @@ A list of configuration keys of the extensions
                                 else - nested objects will be saved
                                 like Dbrefs, default -  False
 ``MONGODB_AUTOINCREMENT``       parametr to use autoincrement ids in
-                                models, default -  True, for usage you
+                                models, default -  False, for usage you
                                 should set the model attribute inc_id to True
 ``MONGODB_FALLBACK_LANG``       fallback language, default - 'en'
 =============================== =========================================
