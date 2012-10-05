@@ -685,10 +685,11 @@ class MongoSet(object):
         """
         if not hasattr(self, "db"):
             self.db = self.connection[self.app.config['MONGODB_DATABASE']]
-            self.db.add_son_manipulator(NamespaceInjector())
             if self.app.config['MONGODB_AUTOREF']:
+                self.db.add_son_manipulator(NamespaceInjector())
                 self.db.add_son_manipulator(AutoReferenceObject(self))
             else:
+                self.db.add_son_manipulator(NamespaceInjector())
                 self.db.add_son_manipulator(SavedObject())
             if self.app.config['MONGODB_AUTOINCREMENT']:
                 self.db.add_son_manipulator(AutoincrementId())
