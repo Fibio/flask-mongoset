@@ -620,7 +620,7 @@ class MongoSet(object):
         app.config.setdefault('MONGODB_USERNAME', '')
         app.config.setdefault('MONGODB_PASSWORD', '')
         app.config.setdefault('MONGODB_DATABASE', "")
-        app.config.setdefault('MONGODB_AUTOREF', True)
+        app.config.setdefault('MONGODB_AUTOREF', False)
         app.config.setdefault('MONGODB_AUTOINCREMENT', False)
         app.config.setdefault('MONGODB_FALLBACK_LANG', 'en')
         app.config.setdefault('MONGODB_SLAVE_OKAY', False)
