@@ -292,11 +292,10 @@ class BaseQuery(Collection):
         return result
 
     def remove(self, spec_or_id=None, safe=None, **kwargs):
-        result = super(BaseQuery, self).remove(spec_or_id, safe, **kwargs)
         signal_map[after_delete].send(self.document_class.__name__,
                                       _id=spec_or_id, collection=self,
                                       signal=after_delete)
-        return result
+        return super(BaseQuery, self).remove(spec_or_id, safe, **kwargs)
 
     def get(self, id):
         return self.find_one({'_id': id}) or self.find_one({'id': id})

@@ -17,7 +17,7 @@ from setuptools import setup
 
 setup(
     name='Flask-MongoSet',
-    version='0.1.3',
+    version='0.1.5',
     url='https://github.com/Fibio/flask-mongoset',
     license='MIT',
     author='Yehor Nazarkin, Tatyana Kuznetsova',
