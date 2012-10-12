@@ -26,6 +26,7 @@ class BaseTest(object):
         app.config['MONGODB_PORT'] = 27017
         app.config['MONGODB_DATABASE'] = "testdb"
         app.config['MONGODB_AUTOREF'] = True
+        app.config['MONGODB_AUTOINCREMENT'] = True
         app.config['TESTING'] = True
         db.init_app(app)
         self.app = app
