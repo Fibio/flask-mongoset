@@ -683,6 +683,9 @@ class MongoSet(object):
     @property
     def session(self):
         """ Returns MongoDB
+        gnklweio
+        efbweuktfh;
+        ej,fgvweukfhlq
         """
         if not hasattr(self, "db"):
             self.db = self.connection[self.app.config['MONGODB_DATABASE']]
