@@ -620,7 +620,7 @@ class MongoSet(object):
         app.config.setdefault('MONGODB_USERNAME', '')
         app.config.setdefault('MONGODB_PASSWORD', '')
         app.config.setdefault('MONGODB_DATABASE', "")
-        app.config.setdefault('MONGODB_AUTOREF', True)
+        app.config.setdefault('MONGODB_AUTOREF', False)
         app.config.setdefault('MONGODB_AUTOINCREMENT', False)
         app.config.setdefault('MONGODB_FALLBACK_LANG', 'en')
         app.config.setdefault('MONGODB_SLAVE_OKAY', False)
@@ -685,10 +685,11 @@ class MongoSet(object):
         """
         if not hasattr(self, "db"):
             self.db = self.connection[self.app.config['MONGODB_DATABASE']]
-            self.db.add_son_manipulator(NamespaceInjector())
             if self.app.config['MONGODB_AUTOREF']:
+                self.db.add_son_manipulator(NamespaceInjector())
                 self.db.add_son_manipulator(AutoReferenceObject(self))
             else:
+                self.db.add_son_manipulator(NamespaceInjector())
                 self.db.add_son_manipulator(SavedObject())
             if self.app.config['MONGODB_AUTOINCREMENT']:
                 self.db.add_son_manipulator(AutoincrementId())
