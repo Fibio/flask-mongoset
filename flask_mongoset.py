@@ -511,7 +511,8 @@ class Model(AttrDict):
             dct.update(**initial)
 
         for field in self._protected_field_names:
-            if field in dct:
+            if field in dct and not isinstance(getattr(self.__class__,
+                                                       field, None), property):
                 raise AttributeError("Forbidden attribute name {} for"
                             " model {}".format(field, self.__class__.__name__))
         super(Model, self).__init__(initial, **kwargs)
