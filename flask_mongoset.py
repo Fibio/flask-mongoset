@@ -23,6 +23,7 @@ import trafaret as t
 from bson.dbref import DBRef
 
 from flask import abort
+from flask.signals import _signals
 
 from pymongo import Connection, ASCENDING
 from pymongo.cursor import Cursor
@@ -37,6 +38,14 @@ inc_collections = set([])
 
 # list of collections for models witch need auto dbref
 autoref_collections = {}
+
+after_insert = 'after_insert'
+after_update = 'after_update'
+after_delete = 'after_delete'
+
+signal_map = {after_insert: _signals.signal('mongo_after_insert'),
+              after_update: _signals.signal('mongo_after_update'),
+              after_delete: _signals.signal('mongo_after_delete')}
 
 
 class AuthenticationError(Exception):
@@ -256,6 +265,17 @@ class BaseQuery(Collection):
 
         return MongoCursor(self, *args, **kwargs)
 
+    def insert(self, doc_or_docs, manipulate=True,
+               safe=None, check_keys=True, continue_on_error=False, **kwargs):
+        """ Overrided method for sending :after_insert: signal
+        """
+        _id = super(BaseQuery, self).insert(doc_or_docs, manipulate, safe,
+                                            check_keys, continue_on_error,
+                                            **kwargs)
+        signal_map[after_insert].send(self.document_class.__name__, _id=_id,
+                                      collection=self, signal=after_insert)
+        return _id
+
     def update(self, spec, document, **kwargs):
         if self.i18n:
             lang = kwargs.pop('_lang')
@@ -265,7 +285,18 @@ class BaseQuery(Collection):
                 else:
                     document[attr] = {lang: value}
 
-        return super(BaseQuery, self).update(spec, document, **kwargs)
+        _id = spec.get('_id')
+        result = super(BaseQuery, self).update(spec, document, **kwargs)
+        signal_map[after_update].send(self.document_class.__name__, _id=_id,
+                                      collection=self, signal=after_update)
+        return result
+
+    def remove(self, spec_or_id=None, safe=None, **kwargs):
+        result = super(BaseQuery, self).remove(spec_or_id, safe, **kwargs)
+        signal_map[after_delete].send(self.document_class.__name__,
+                                      _id=spec_or_id, collection=self,
+                                      signal=after_delete)
+        return result
 
     def get(self, id):
         return self.find_one({'_id': id}) or self.find_one({'id': id})
@@ -298,6 +329,12 @@ class BaseQuery(Collection):
                 attrs.insert(1, lang)
                 document['.'.join(attrs)] = document.pop(attr)
         return document
+
+    def delete(self):
+        return self.drop()
+
+    def all(self):
+        return self.find()
 
 
 class ModelType(type):
