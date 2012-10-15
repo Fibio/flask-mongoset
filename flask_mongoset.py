@@ -261,8 +261,7 @@ class BaseQuery(Collection):
                                 "dict")
 
             spec = self._insert_lang(spec, lang)
-            with open('/home/fibio/Documents/test_file.txt', 'w') as out:
-                print >> out, args, kwargs
+
         return MongoCursor(self, *args, **kwargs)
 
     def insert(self, doc_or_docs, manipulate=True,
