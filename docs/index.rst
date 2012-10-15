@@ -76,9 +76,14 @@ Make sure that your MongoDB database is running. To create a new post:
 >>> post = Post.create(title="test", content="hello")
 >>> product = Product.create({'name': 'Name', 'quantity': 1, 'attrs':{'feature': 'ice', 'revision': 1}})
 
-Then, when you want to access the saved objects:
+Then, when you want to access the saved objects use can use find or find_one methods.
+All of them can work with mongo modifiers:
 
 >>> Post.query.find({"title": "test"})
+
+>>> Product.query.find({'quantity': {'$gte': 2}})
+
+>>> Product.query.find({'attrs.feature': 'ice', 'attrs.revision': {'$in': [1, 2]}})
 
 find with translation language:
 
