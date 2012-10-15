@@ -261,8 +261,8 @@ class BaseQuery(Collection):
                                 "dict")
 
             spec = self._insert_lang(spec, lang)
-            self._make_attrs(spec)
-
+            with open('/home/fibio/Documents/test_file.txt', 'w') as out:
+                print >> out, args, kwargs
         return MongoCursor(self, *args, **kwargs)
 
     def insert(self, doc_or_docs, manipulate=True,
@@ -310,23 +310,16 @@ class BaseQuery(Collection):
         cursor = self.find(*args, **kwargs)
         return not cursor.count() == 0 and cursor or abort(404)
 
-    def _make_attrs(self, kwargs):
-        dct = kwargs.copy()
-        for attr, value in dct.iteritems():
-            if isinstance(value, dict):
-                kwargs.pop(attr)
-                value = self._make_attrs(value)
-                for k, v in value.iteritems():
-                    key = "{}.{}".format(attr, k)
-                    kwargs[key] = v
-        return kwargs
-
     def _insert_lang(self, document, lang):
         for attr in document.copy():
-            attrs = attr.split('.')
-            if attrs[0] in self.i18n:
-                attrs.insert(1, lang)
-                document['.'.join(attrs)] = document.pop(attr)
+            if attr.startswith('$') and attr != '$where':
+                document[attr] = map(lambda a: self._insert_lang(a, lang),
+                                     document[attr])
+            else:
+                attrs = attr.split('.')
+                if attrs[0] in self.i18n and '$' not in attr:
+                    attrs.insert(1, lang)
+                    document['.'.join(attrs)] = document.pop(attr)
         return document
 
     def delete(self):

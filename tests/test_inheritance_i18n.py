@@ -120,3 +120,77 @@ class TestValidation(BaseTest):
         assert not 'quantity' in result
         assert result.list_attrs == ['one', 'two']
         assert not self.model.query.find_one({'salers.name': 'John'})
+
+    def test_complicated_find(self):
+        self.model.get_or_create({'name': 'First', 'quantity': 1,
+                                  'attrs': {'feature': 'ice', 'revision': 1},
+                                  'list_attrs': ['one', 'two'],
+                                  'salers': [{'name': 'John', 'address': 'NY'},
+                                           {'name': 'Jane', 'address': 'CA'}]},
+                                  _lang='en')
+
+        self.model.get_or_create({'name': 'Second', 'quantity': 5,
+                                  'attrs': {'feature': 'ice', 'revision': 10},
+                                  'list_attrs': ['one', 'two'],
+                                  'salers': [{'name': 'John', 'address': 'NY'},
+                                           {'name': 'Jane', 'address': 'CA'}]},
+                                  _lang='en')
+
+        self.model.get_or_create({'name': 'Third', 'quantity': 3,
+                                  'attrs': {'feature': 'ico', 'revision': 100},
+                                  'salers': [{'name': 'John', 'address': 'NY'},
+                                           {'name': 'Jane', 'address': 'CA'}]},
+                                  _lang='en')
+
+        assert self.model.query.find(
+            {'attrs.revision': {'$ne': 100}}).count() == 2
+        assert self.model.query.find(
+            {'attrs.revision': {'$gt': 100}}).count() == 0
+        assert self.model.query.find(
+            {'attrs.revision': {'$gte': 100}}).count() == 1
+        assert self.model.query.find(
+            {'name': {'$ne': 'First'}}).count() == 2
+        assert self.model.query.find(
+            {'attrs.revision': {'$lte': 100}}).count() == 3
+        assert self.model.query.find(
+            {'attrs.revision': {'$lt': 100}}).count() == 2
+        assert self.model.query.find(
+            {'list_attrs': {'$all': ['one', 'two']}}).count() == 2
+        assert self.model.query.find(
+            {'list_attrs': {'$exists': False}}).count() == 1
+        assert self.model.query.find(
+            {'list_attrs': {'$exists': True}}).count() == 2
+        assert self.model.query.find(
+            {'quantity': {'$in': [1, 5]}}).count() == 2
+        assert self.model.query.find(
+            {'quantity': {'$nin': [1, 5]}}).count() == 1
+        assert self.model.query.find(
+            {'attrs.feature': 'ice'}).count() == 2
+        assert self.model.query.find(
+            {'attrs.feature': 'ice',
+             'attrs.revision': {'$in': [1, 100]}}).count() == 1
+        assert self.model.query.find(
+            {'attrs.feature': 'ice',
+             '$or': [{'attrs.revision': 10},
+                     {'attrs.revision': 50}]}).count() == 1
+        assert self.model.query.find(
+            {'$and': [{'name':'First'}, {'quantity':5}]}).count() == 0
+        assert self.model.query.find(
+            {'$and': [{'name':'Second'}, {'quantity':5}]}).count() == 1
+        assert self.model.query.find(
+            {'list_attrs': {'$size': 2}}).count() == 2
+        assert self.model.query.find(
+            {'name': {'$type': 2}}).count() == 3
+
+        instance = self.model.query.find_one({'name': 'Third'})
+        instance._lang = 'fr'
+        instance.update({'$set': {'attrs.feature': 'ico[1]'}})
+        assert self.model.query.find(
+            {'attrs.feature': 'ico'}).count() == 1
+        assert self.model.query.find(
+            {'attrs.feature': 'ico[1]'}, _lang='fr').count() == 1
+        assert self.model.query.find(
+            {'attrs.feature': {'$regex': 'ico\\[.*\\]'}},
+            _lang='fr').count() == 1
+        assert self.model.query.find(
+            {'$where': 'this.attrs.en.revision > 50'}).count() == 1
