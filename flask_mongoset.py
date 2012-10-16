@@ -125,7 +125,8 @@ class AutoincrementId(SONManipulator):
     """
     def transform_incoming(self, son, collection):
         if collection.name in inc_collections:
-            son["id"] = son.get('id', self._get_next_id(collection))
+            son["searchd_id"] = son.get('searchd_id',
+                                        self._get_next_id(collection))
         return son
 
     def _get_next_id(self, collection):
@@ -297,7 +298,7 @@ class BaseQuery(Collection):
         return super(BaseQuery, self).remove(spec_or_id, safe, **kwargs)
 
     def get(self, id):
-        return self.find_one({'_id': id}) or self.find_one({'id': id})
+        return self.find_one({'_id': id}) or self.find_one({'searchd_id': id})
 
     def get_or_404(self, id):
         return self.get(id) or abort(404)
