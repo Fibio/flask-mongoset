@@ -335,23 +335,14 @@ class ModelType(type):
         Adds :_protected_field_names: into class and :indexes: into Mondodb
     """
     def __new__(cls, name, bases, dct):
-        #  change structure for translated fields:
         structure = dct.get('structure')
-        if structure and dct.get('i18n'):
-            for key in structure.keys[:]:
-                if key.name in dct['i18n']:
-                    dct['structure'].keys.remove(key)
-                    dct['structure'].keys.append(t.Key(key.name,
-                                    trafaret=t.Mapping(t.String, key.trafaret),
-                                    default=key.default, optional=key.optional,
-                                    to_name=key.to_name))
 
         # inheritance from abstract models:
         for model in bases:
 
             if getattr(model, '__abstract__', None) is True:
                 if '__abstract__' not in dct:
-                    dct.__setitem__('__abstract__', False)
+                    dct['__abstract__'] = False
                 key_attrs = ['i18n', 'indexes', 'required_fields']
 
                 for attr in key_attrs:
@@ -380,6 +371,15 @@ class ModelType(type):
 
                 break
 
+        #  change structure for translated fields:
+        if not dct.get('__abstract__') and structure and dct.get('i18n'):
+            for key in structure.keys[:]:
+                if key.name in dct['i18n']:
+                    dct['structure'].keys.remove(key)
+                    dct['structure'].keys.append(t.Key(key.name,
+                                    trafaret=t.Mapping(t.String, key.trafaret),
+                                    default=key.default, optional=key.optional,
+                                    to_name=key.to_name))
         # add required_fields:
         if 'required_fields' in dct:
             required_fields = dct.get('required_fields')
