@@ -20,7 +20,7 @@ import copy
 import operator
 import trafaret as t
 
-from bson.dbref import DBRef
+from bson import DBRef
 
 from flask import abort
 from flask.signals import _signals
