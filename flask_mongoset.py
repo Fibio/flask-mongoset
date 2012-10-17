@@ -484,7 +484,7 @@ class Model(AttrDict):
 
     query_class = BaseQuery
 
-    structure = t.Dict().allow_extra('*')
+    structure = t.Dict()
 
     required_fields = []
 
