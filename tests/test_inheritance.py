@@ -11,7 +11,7 @@ class BaseModel(Model):
         'name': t.String,
         'quantity': t.Int,
         'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
-    }).allow_extra('_id', '_ns', 'id').ignore_extra('wrong_attr')
+    }).allow_extra('_id', '_ns', '_int_id').ignore_extra('wrong_attr')
     indexes = ['id']
     required_fields = ['name', 'quantity']
 
@@ -94,7 +94,7 @@ class TestValidation(BaseTest):
                     'attrs': {'feature': 'ice', 'revision': 1},
                     'list_attrs': ['one', 'two']})
         result = self.model.query.find_one({'name': 'Name'})
-        assert result.id
+        assert result._int_id
 
     def test_update(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,

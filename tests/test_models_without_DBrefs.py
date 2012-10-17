@@ -29,7 +29,7 @@ class TestModelDecorator(BaseModelTest):
 
     def test_autoincrement(self):
         result = self.model.create(name='Hello')
-        assert result.id == 1
+        assert result._int_id == 1
 
     def test_handle_auto_object_inside_a_list(self):
         parent = self.model.get_or_create({'test': 'hellotest'})

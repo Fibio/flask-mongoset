@@ -28,4 +28,4 @@ class TestModelDecorator(BaseModelTest):
 
     def test_autoincrement(self):
         result = self.model.create(name='Hello')
-        assert result.id == 1
+        assert result._int_id == 1
