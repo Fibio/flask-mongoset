@@ -20,7 +20,7 @@ import copy
 import operator
 import trafaret as t
 
-from bson.dbref import DBRef
+from bson import DBRef
 
 from flask import abort
 from flask.signals import _signals
@@ -125,7 +125,8 @@ class AutoincrementId(SONManipulator):
     """
     def transform_incoming(self, son, collection):
         if collection.name in inc_collections:
-            son["id"] = son.get('id', self._get_next_id(collection))
+            son["_int_id"] = son.get('_int_id',
+                                        self._get_next_id(collection))
         return son
 
     def _get_next_id(self, collection):
@@ -297,7 +298,7 @@ class BaseQuery(Collection):
         return super(BaseQuery, self).remove(spec_or_id, safe, **kwargs)
 
     def get(self, id):
-        return self.find_one({'_id': id}) or self.find_one({'id': id})
+        return self.find_one({'_id': id}) or self.find_one({'_int_id': id})
 
     def get_or_404(self, id):
         return self.get(id) or abort(404)
