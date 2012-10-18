@@ -484,7 +484,7 @@ class Model(AttrDict):
 
     query_class = BaseQuery
 
-    structure = t.Dict().allow_extra('*')
+    structure = t.Dict()
 
     required_fields = []
 
@@ -548,12 +548,10 @@ class Model(AttrDict):
     def update(self, data=None, **kwargs):
         if data is None:
             data = {}
-            update_options = set(['upsert', 'manipulate', 'safe',
-                                  'multi', '_check_keys'])
+            update_options = set(['upsert', 'manipulate', 'safe', 'multi',
+                                  '_check_keys'])
             new_attrs = list(kwargs.viewkeys() - update_options)
-            for k in new_attrs:
-                data[k] = kwargs.pop(k)
-            data = {'$set': data}
+            data = {'$set': dict((k, kwargs.pop(k)) for k in new_attrs)}
 
         if self.i18n:
             kwargs['_lang'] = self._lang
