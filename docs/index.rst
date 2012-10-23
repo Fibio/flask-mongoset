@@ -45,7 +45,7 @@ It also provides a :class:`Model` that can be used to declare your Model object:
             'quantity': t.Int,
             'attrs': t.Mapping(t.String, t.Or(t.Int, t.Float, t.String)),
         }).allow_extra('*')
-        indexes = ['id']
+        indexes = ['_id']
         required_fields = ['title']
         i18n = ['title']
 
@@ -59,7 +59,7 @@ You can also register your models via register method::
             structure = t.Dict({
                 'title': t.String,
                 'content': t.String})
-            indexes = ['id', 'title']
+            indexes = ['id', '_int_id', 'title']
             i18n = ['title', 'content']
 
         mongo.register(Post)
@@ -184,7 +184,7 @@ Also your model can be abstract::
             }).allow_extra('*')
             required_fields = ['name']
             i18n = ['name', 'attrs']
-            indexes = ['id']
+            indexes = ['_id']
 
 
         class Product(BaseModel):
@@ -201,7 +201,7 @@ Also your model can be abstract::
 Out: ['list_attrs', 'name', 'attrs']
 
 >>> Product.indexes
-Out: [('quantity', -1), ('id', 1), ('name', 1)]
+Out: [('quantity', -1), ('_id', 1), ('name', 1)]
 
 >>> Product.required_fields
 Out: ['name']
@@ -237,7 +237,8 @@ A list of configuration keys of the extensions
                                 like Dbrefs, default -  False
 ``MONGODB_AUTOINCREMENT``       parametr to use autoincrement ids in
                                 models, default -  False, for usage you
-                                should set the model attribute inc_id to True
+                                should set the model attribute inc_id to True.
+                                It adds _int_id attribute into the model
 ``MONGODB_FALLBACK_LANG``       fallback language, default - 'en'
 =============================== =========================================
 
