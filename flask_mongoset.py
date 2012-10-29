@@ -470,8 +470,9 @@ class Model(AttrDict):
     def __init__(self, initial=None, **kwargs):
         self.from_db = kwargs.pop('from_db', False)
         self._lang = kwargs.pop('_lang', self._fallback_lang)
-        self._class = ".".join([self.__class__.__module__,
-                             self.__class__.__name__])
+        if not self.from_db:
+            self._class = ".".join([self.__class__.__module__,
+                                    self.__class__.__name__])
         dct = kwargs.copy()
 
         if initial and isinstance(initial, dict):
