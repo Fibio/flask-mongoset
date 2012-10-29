@@ -20,10 +20,12 @@ import copy
 import operator
 import trafaret as t
 
-from bson import DBRef
+from bson import ObjectId
 
 from flask import abort
 from flask.signals import _signals
+
+from importlib import import_module
 
 from pymongo import Connection, ASCENDING
 from pymongo.cursor import Cursor
@@ -139,7 +141,7 @@ class AutoincrementId(SONManipulator):
         return result["next"]
 
 
-class AutoReferenceObject(AutoReference):
+class SavedObject(SONManipulator):
     """
     Transparently reference and de-reference already saved embedded objects.
 
@@ -154,60 +156,29 @@ class AutoReferenceObject(AutoReference):
     use of the optional `database` support for DBRefs.
     """
 
-    def __init__(self, mongoset):
-        self.__database = mongoset.session
+    def will_copy(self):
+        return True
+
+    def _transform_value(self, value):
+        if isinstance(value, list):
+            return map(self._transform_value, value)
+
+        if isinstance(value, dict):
+            if value.get('_class'):
+                module_name, class_name = value['_class'].rsplit('.', 1)
+                cls = getattr(import_module(module_name), class_name)
+                return cls(self._transform_dict(value))
+            return self._transform_dict(value)
+
+        return value
+
+    def _transform_dict(self, object):
+        for (key, value) in object.items():
+            object[key] = self._transform_value(value)
+        return object
 
     def transform_outgoing(self, son, collection):
-        if collection.name in autoref_collections:
-            def transform_value(value):
-                if isinstance(value, DBRef):
-                    return transform_value(self.__database.dereference(value))
-                elif isinstance(value, list):
-                    return map(transform_value, value)
-                elif isinstance(value, dict):
-                    if value.get('_ns'):
-                        cls = autoref_collections.get(value['_ns'])
-                        if cls:
-                            return cls(transform_dict(value))
-                    return transform_dict(value)
-                return value
-
-            def transform_dict(object):
-                for (key, value) in object.items():
-                    object[key] = transform_value(value)
-                return object
-            son = transform_dict(son)
-        return son
-
-
-class SavedObject(SONManipulator):
-    """
-    Takes document from db as class instance.
-
-    This manipulator should probably only be used when the NamespaceInjector is
-    also being used, otherwise it doesn't make too much sense - nested
-    documents can only be taken from db as instace if they have an `_ns` field.
-    """
-
-    def transform_outgoing(self, son, collection):
-        if collection.name in autoref_collections:
-            def transform_value(value):
-                if isinstance(value, list):
-                    return map(transform_value, value)
-                elif isinstance(value, dict):
-                    if value.get('_ns'):
-                        cls = autoref_collections.get(value['_ns'])
-                        if cls:
-                            return cls(transform_dict(value))
-                    return transform_dict(value)
-                return value
-
-            def transform_dict(object):
-                for (key, value) in object.items():
-                    object[key] = transform_value(value)
-                return object
-            son = transform_dict(son)
-        return son
+        return self._transform_dict(son)
 
 
 class MongoCursor(Cursor):
@@ -338,6 +309,9 @@ class ModelType(type):
     def __new__(cls, name, bases, dct):
         structure = dct.get('structure')
 
+        if structure is not None:
+            structure.allow_extra('_class', '_id', '_ns', '_int_id')
+
         # inheritance from abstract models:
         for model in bases:
 
@@ -369,7 +343,6 @@ class ModelType(type):
                                                 set(structure.ignore))
                 elif model.structure:
                     dct['structure'] = model.structure
-
                 break
 
         #  change structure for translated fields:
@@ -497,6 +470,9 @@ class Model(AttrDict):
     def __init__(self, initial=None, **kwargs):
         self.from_db = kwargs.pop('from_db', False)
         self._lang = kwargs.pop('_lang', self._fallback_lang)
+        if not self.from_db:
+            self._class = ".".join([self.__class__.__module__,
+                                    self.__class__.__name__])
         dct = kwargs.copy()
 
         if initial and isinstance(initial, dict):
@@ -713,14 +689,16 @@ class MongoSet(object):
         """
         if not hasattr(self, "db"):
             self.db = self.connection[self.app.config['MONGODB_DATABASE']]
+            # we need namespaces in any case
+            self.db.add_son_manipulator(NamespaceInjector())
+
             if self.app.config['MONGODB_AUTOREF']:
-                self.db.add_son_manipulator(NamespaceInjector())
-                self.db.add_son_manipulator(AutoReferenceObject(self))
-            else:
-                self.db.add_son_manipulator(NamespaceInjector())
-                self.db.add_son_manipulator(SavedObject())
+                self.db.add_son_manipulator(AutoReference(self.db))
+
             if self.app.config['MONGODB_AUTOINCREMENT']:
                 self.db.add_son_manipulator(AutoincrementId())
+
+            self.db.add_son_manipulator(SavedObject())
         return self.db
 
     def clear(self):
