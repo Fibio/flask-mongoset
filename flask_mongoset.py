@@ -384,7 +384,7 @@ class ModelType(type):
         # add required_fields:
         if 'required_fields' in dct:
             required_fields = dct.get('required_fields')
-            if 'structure' in dct:
+            if dct.get('structure') is not None:
                 optional = filter(lambda key: key.name not in dct['required_fields'],
                                   dct['structure'].keys)
                 optional = map(operator.attrgetter('name'), optional)
@@ -484,7 +484,7 @@ class Model(AttrDict):
 
     query_class = BaseQuery
 
-    structure = t.Dict()
+    structure = None
 
     required_fields = []
 
@@ -536,7 +536,7 @@ class Model(AttrDict):
                                document_class=cls)
 
     def save(self, *args, **kwargs):
-        data = self.structure.check(self)
+        data = self.structure and self.structure.check(self) or self
         return self.query.save(data, *args, **kwargs)
 
     def save_with_reload(self, *args, **kwargs):
