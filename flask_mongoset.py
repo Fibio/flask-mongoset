@@ -50,6 +50,11 @@ signal_map = {after_insert: _signals.signal('mongo_after_insert'),
               after_delete: _signals.signal('mongo_after_delete')}
 
 
+def resolve_class(class_path):
+    module_name, class_name = class_path.rsplit('.', 1)
+    return getattr(import_module(module_name), class_name)
+
+
 class AuthenticationError(Exception):
     pass
 
@@ -165,8 +170,7 @@ class SavedObject(SONManipulator):
 
         if isinstance(value, dict):
             if value.get('_class'):
-                module_name, class_name = value['_class'].rsplit('.', 1)
-                cls = getattr(import_module(module_name), class_name)
+                cls = resolve_class(value['_class'])
                 return cls(self._transform_dict(value))
             return self._transform_dict(value)
 
@@ -178,7 +182,7 @@ class SavedObject(SONManipulator):
         return object
 
     def transform_outgoing(self, son, collection):
-        return self._transform_dict(son)
+        return self._transform_value(son)
 
 
 class MongoCursor(Cursor):
