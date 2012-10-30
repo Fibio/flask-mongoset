@@ -21,6 +21,6 @@ class TestAttrDict(BaseTest):
         assert test.a[0] == "test"
 
     def test_setup_database_properly(self):
-        assert self.db.app
-        assert self.db.connection
-        assert self.db.session.name == "testdb"
+        assert self.mongo.app
+        assert self.mongo.connection
+        assert self.mongo.db.name == "testdb"

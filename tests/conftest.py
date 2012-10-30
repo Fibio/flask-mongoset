@@ -5,7 +5,7 @@ from werkzeug.exceptions import NotFound
 from flask.ext.mongoset import MongoSet, Model
 
 
-db = MongoSet()
+mongo = MongoSet()
 app = flask.Flask(__name__)
 TESTING = True
 
@@ -14,7 +14,7 @@ class SomeModel(Model):
     __collection__ = "tests"
 
 
-class SomedbModel(db.Model):
+class SomedbModel(mongo.Model):
     __collection__ = "dbtests"
     use_autorefs = True
 
@@ -28,12 +28,12 @@ class BaseTest(object):
         app.config['MONGODB_AUTOREF'] = True
         app.config['MONGODB_AUTOINCREMENT'] = True
         app.config['TESTING'] = True
-        db.init_app(app)
+        mongo.init_app(app)
         self.app = app
-        self.db = db
+        self.mongo = mongo
 
     def teardown(self):
-        db.clear()
+        mongo.clear()
 
 
 class BaseModelTest(BaseTest):
@@ -41,7 +41,7 @@ class BaseModelTest(BaseTest):
 
     def insert(self, dct):
         insert = methodcaller("insert", dct)
-        collection = attrgetter('db.session.{}'.format(
+        collection = attrgetter('mongo.session.{}'.format(
                                 self.model.__collection__))
         return insert(collection(self))
 

@@ -113,6 +113,15 @@ get_or_404:
 >>> Product.query.find_one_or_404(name='wrong_name')
 >>> Product.query.find_or_404(name='wrong_name')
 
+All query method kind of find return instance of class with called it:
+
+>>> type(Product.query.get_or_404("some product _id"))
+Out: Product
+
+Simple query from db returns instance of class from document parameter '_class':
+
+>>> type(mongo.db.products.find_one({'_id': "some product _id"}))
+Out: Product
 
 The :class:`Model` has a `query` attribute similar to  :mod:`Flask-SQLAlchemy` that
 can be used to query the collections.
@@ -132,7 +141,7 @@ if you want to get updated instance, you have to use update_with_reload method:
 Be carefull with simple update without modifiers:
 
 >>> print product
-Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Fridge', 'attrs': ['revision', 'class', 'volume']}>
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Fridge', 'attrs': ['revision', 'class', 'volume'], '_class': 'my_project.Product'}>
 >>> product = product.update_with_reload({'name': 'Freezer'})
 >>> print product
 Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Freezer'}>
@@ -140,19 +149,19 @@ Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Freezer'}>
 But you can use update with kwargs:
 
 >>> print product
-Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Fridge', 'attrs': ['revision', 'class', 'volume']}>
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Fridge', 'attrs': ['revision', 'class', 'volume'], '_class': 'my_project.Product'}>
 >>> product = product.update_with_reload(**{'name': 'Freezer'})
 >>> print product
-Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Freezer', 'attrs': ['revision', 'class', 'volume']}>
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'Freezer', 'attrs': ['revision', 'class', 'volume'], '_class': 'my_project.Product'}>
 >>> product = product.update_with_reload(name='NewFreezer')
 >>> print product
-Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'NewFreezer', 'attrs': ['revision', 'class', 'volume']}>
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'NewFreezer', 'attrs': ['revision', 'class', 'volume'], '_class': 'my_project.Product'}>
 
 'update' method is the same, but doesn't reload instance and returns 'None'
 
 >>> product.update(name='NewFridge')
 >>> print product
-Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'NewFreezer', 'attrs': ['revision', 'class', 'volume']}>
+Out: <Product:{'_id': ObjectId('506ee185312f9113c0000005'), 'name': 'NewFreezer', 'attrs': ['revision', 'class', 'volume'], '_class': 'my_project.Product'}>
 >>> product.update(name='NewFridge')
 >>> print product
 Out: None
@@ -231,10 +240,8 @@ A list of configuration keys of the extensions
                                 default - ""
 ``MONGODB_AUTOREF``             parametr to use Dbrefs for save nested
                                 objects, if it is False nested objects
-                                will be saved like dictionaries, and
-                                converted in instances after query
-                                else - nested objects will be saved
-                                like Dbrefs, default -  False
+                                will be saved like dictionaries,
+                                default -  False
 ``MONGODB_AUTOINCREMENT``       parametr to use autoincrement ids in
                                 models, default -  False, for usage you
                                 should set the model attribute inc_id to True.

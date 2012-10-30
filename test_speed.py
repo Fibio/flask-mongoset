@@ -41,13 +41,15 @@ if __name__ == '__main__':
     cProfile.run('create_model(interval)')
     #old_version, for interval = 1000: 116059 function calls (114058 primitive calls) in 0.192-0.211 seconds
     #new with translation, for interval = 1000: 112007 function calls (107007 primitive calls) in 0.230-0.241 seconds
+    #v 1.08: 124007 function calls (119007 primitive calls) in 0.271 seconds
 
     cProfile.run('find_model(interval)')
     #old_version, for interval = 1000: 51003 function calls in 0.078-0.086 seconds
     #new with translation, for interval = 1000:  42003 function calls in 0.065-0.079 seconds
+    #v 1.08: 46003 function calls in 0.068 seconds
 
     cProfile.run('update_model(interval)')
     #new : for interval = 1000: 85132 function calls in 0.219-0.224 seconds
-
+    #v 1.08: 46243 function calls (46232 primitive calls) in 0.097 seconds
 
     db.clear()

@@ -1,5 +1,15 @@
 from flask.ext.mongoset import Model
-from conftest import BaseModelTest, app, db
+from conftest import BaseModelTest, app, mongo
+
+
+class NewModel(Model):
+    __collection__ = 'notdbrefstests'
+    inc_id = True
+    indexes = ['id', 'name']
+
+
+class InsideModel(Model):
+    __collection__ = 'inside'
 
 
 class TestModelDecorator(BaseModelTest):
@@ -11,21 +21,13 @@ class TestModelDecorator(BaseModelTest):
         app.config['MONGODB_AUTOREF'] = False
         app.config['MONGODB_AUTOINCREMENT'] = True
         app.config['TESTING'] = True
-        db.init_app(app)
+        mongo.init_app(app)
         self.app = app
-        self.db = db
-
-        @self.db.register
-        class NewModel(Model):
-            __collection__ = 'notdbrefstests'
-            inc_id = True
-            indexes = ['id', 'name']
-
-        class InsideModel(Model):
-            __collection__ = 'inside'
+        self.mongo = mongo
 
         self.model = NewModel
         self.insideModel = InsideModel
+        self.mongo.register(self.model)
 
     def test_autoincrement(self):
         result = self.model.create(name='Hello')

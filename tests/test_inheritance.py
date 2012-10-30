@@ -44,7 +44,7 @@ class TestValidation(BaseTest):
 
     def setUp(self):
         super(TestValidation, self).setUp()
-        self.db.register(self.model)
+        self.mongo.register(self.model)
 
     def test_inheritance(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
@@ -72,7 +72,7 @@ class TestValidation(BaseTest):
                                   'quantity': 1, 'list_attrs': ['one', 'two']})
 
     def test_required_fields_without_structure(self):
-        self.db.register(SimpleModel)
+        self.mongo.register(SimpleModel)
         try:
             SimpleModel.create({'quantity': '1'})
             assert False

@@ -17,7 +17,7 @@ class TestValidation(BaseTest):
 
     def setUp(self):
         super(TestValidation, self).setUp()
-        self.db.register(self.model)
+        self.mongo.register(self.model)
 
     def test_validate(self):
         try:

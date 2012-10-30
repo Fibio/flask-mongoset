@@ -20,8 +20,6 @@ import copy
 import operator
 import trafaret as t
 
-from bson import ObjectId
-
 from flask import abort
 from flask.signals import _signals
 
@@ -37,9 +35,6 @@ from pymongo.son_manipulator import (SONManipulator, AutoReference,
 
 # list of collections for models witch need autoincrement id
 inc_collections = set([])
-
-# list of collections for models witch need auto dbref
-autoref_collections = {}
 
 after_insert = 'after_insert'
 after_update = 'after_update'
@@ -83,7 +78,7 @@ class AttrDict(dict):
     Base object that represents a MongoDB document. The object will behave both
     like a dict `x['y']` and like an object `x.y`
 
-    :param initial: you can define new instance via dictionary:
+    :param initial: you can define new instance via dictionary::
                     AttrDict({'a': 'one', 'b': 'two'}) or pass data
                     in kwargs AttrDict(a='one', b='two')
     """
@@ -148,13 +143,12 @@ class AutoincrementId(SONManipulator):
 
 class SavedObject(SONManipulator):
     """
-    Transparently reference and de-reference already saved embedded objects.
+    Сonverts saved documents into class instance, the class name with path of
+    class module keep in document :_class: parameter e.g.::
+        {'name': 'John', 'age': 18, '_class': 'my_project.account.User'} -
+        will convert into class User
 
-    This manipulator should probably only be used when the NamespaceInjector is
-    also being used, otherwise it doesn't make too much sense - documents can
-    only be auto-referenced if they have an `_ns` field.
-
-    NOTE: this will behave poorly if you have a circular reference.
+    Embedded documents will convert, if they have :_class: parameter
 
     TODO: this only works for documents that are in the same database. To fix
     this we'll need to add a DatabaseInjector that adds `_db` and then make
@@ -187,8 +181,8 @@ class SavedObject(SONManipulator):
 
 class MongoCursor(Cursor):
     """
-    A cursor that will return an instance of :param as_class: with
-    provided :param _lang: instead of dict
+    A cursor that will return an instance of :as_class: parameter with
+    provided :_lang: parameter instead of dict type
     """
     def __init__(self, *args, **kwargs):
         self._lang = kwargs.pop('_lang')
@@ -379,10 +373,6 @@ class ModelType(type):
         cls._protected_field_names = list(protected_field_names.union(*names))
 
         if not cls.__abstract__:
-            # add model into DBrefs register:
-            if cls.use_autorefs:
-                autoref_collections.__setitem__(cls.__collection__, cls)
-
             # add model into autoincrement_id register:
             if cls.inc_id:
                 inc_collections.add(cls.__collection__)

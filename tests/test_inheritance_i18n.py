@@ -36,7 +36,7 @@ class TestValidation(BaseTest):
 
     def setUp(self):
         super(TestValidation, self).setUp()
-        self.db.register(self.model)
+        self.mongo.register(self.model)
 
     def test_validate_translated_attrs(self):
         try:
@@ -52,6 +52,13 @@ class TestValidation(BaseTest):
             assert False
         except t.DataError:
             assert True
+
+    def test_get_class_from_db(self):
+        instance = self.model.get_or_create({'name': 'Name', 'quantity': 1,
+                                    'attrs': {'feature': 'ice', 'revision': 1},
+                                    'list_attrs': ['one', 'two']}, _lang='en')
+        result = self.mongo.db.i18ntests.find_one({'_id': instance._id})
+        assert isinstance(result, self.model)
 
     def test_translate(self):
         result = self.model.get_or_create({'name': 'Name', 'quantity': 1,
